@@ -1,5 +1,5 @@
 # ==========================================
-# ProjectPulse AI - Backend .gitignore
+# ProjectPulse AI - .gitignore
 # ==========================================
 
 # --- Python Bytecode & Cache ---
@@ -44,6 +44,7 @@ venv_backend/
 # Exception: allow template/example files
 !.env.example
 !.env.template
+!backend/.env.example
 
 # --- Databases & Local Storage ---
 *.sqlite
@@ -56,24 +57,24 @@ venv_backend/
 *.sql
 
 # --- Data & Ingestion Temporary Artifacts ---
-data/raw/*
-!data/raw/.gitkeep
-data/staging/*
-!data/staging/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/uploads/*
-!data/uploads/.gitkeep
-data/exports/*
-!data/exports/.gitkeep
+**/data/raw/*
+!**/data/raw/.gitkeep
+**/data/staging/*
+!**/data/staging/.gitkeep
+**/data/processed/*
+!**/data/processed/.gitkeep
+**/data/uploads/*
+!**/data/uploads/.gitkeep
+**/data/exports/*
+!**/data/exports/.gitkeep
 *.pdf
 *.xlsx
 *.xls
 *.csv
 # Exceptions for test fixtures or sample data (if placed under tests/)
-!tests/fixtures/*.csv
-!tests/fixtures/*.xlsx
-!tests/fixtures/*.pdf
+!**/tests/fixtures/*.csv
+!**/tests/fixtures/*.xlsx
+!**/tests/fixtures/*.pdf
 
 # --- Logs & Runtime Files ---
 *.log

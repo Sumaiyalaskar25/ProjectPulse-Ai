@@ -2,6 +2,7 @@
   "venvPath": ".",
   "venv": "venv_backend",
   "extraPaths": [
-    "."
+    ".",
+    "backend"
   ]
 }

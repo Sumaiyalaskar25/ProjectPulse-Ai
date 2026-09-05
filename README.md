@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🚀 ProjectPulse AI — Backend Services
+# 🚀 ProjectPulse AI
 
-**Intelligent Government Infrastructure Monitoring & Early Warning API System**
+**Intelligent Government Infrastructure Monitoring & Early Warning System**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org)
@@ -18,13 +18,13 @@
 ## 📖 Table of Contents
 
 - [Executive Overview](#-executive-overview)
-- [System Architecture](#-system-architecture)
+- [Repository Structure](#-repository-structure)
+- [Backend System Architecture](#-backend-system-architecture)
 - [Core Features](#-core-features)
-- [Project Directory Structure](#-project-directory-structure)
 - [Tech Stack & Dependencies](#-tech-stack--dependencies)
-- [Environment Configuration](#-environment-configuration)
+- [Backend Environment Configuration](#-backend-environment-configuration)
 - [Local Setup & Installation](#-local-setup--installation)
-- [Running the Services](#-running-the-services)
+- [Running the Backend Services](#-running-the-backend-services)
 - [API Documentation & Endpoints](#-api-documentation--endpoints)
   - [System & Health](#system--health)
   - [Dashboard & Executive Metrics](#dashboard--executive-metrics)
@@ -38,15 +38,50 @@
 
 ## 🏛 Executive Overview
 
-**ProjectPulse AI** is an enterprise-grade backend platform engineered to monitor, evaluate, and provide predictive risk intelligence for large-scale national infrastructure initiatives.
+**ProjectPulse AI** is an enterprise-grade platform engineered to monitor, evaluate, and provide predictive risk intelligence for large-scale national infrastructure initiatives.
 
 The platform continuously aggregates periodic project reports, evaluates cost and schedule deviations, computes multi-dimensional composite risk scores, triggers automated early-warning alerts, and provides a grounded natural-language AI assistant for decision-makers.
 
 ---
 
-## 🏗 System Architecture
+## 📁 Repository Structure
 
-The backend is built following clean, layered architectural principles:
+The repository is organized into distinct domain folders to maintain separation of concerns:
+
+```
+PROJECTPULSE_AI/
+├── backend/                      # Complete Backend Service Suite
+│   ├── .env.example              # Environment configuration template
+│   ├── Makefile                  # Developer task commands
+│   ├── pytest.ini                # Pytest configuration & path resolution
+│   ├── requirements.txt          # Python dependencies
+│   ├── data/
+│   │   ├── raw/                  # Incoming raw reports (.pdf, .xlsx)
+│   │   └── staging/              # Extracted and normalized data files
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── api/
+│   │   │   ├── main.py           # FastAPI application lifespan & middleware
+│   │   │   ├── dependencies.py   # Dependency injection providers
+│   │   │   ├── core/             # Caching, logging, resilience & errors
+│   │   │   ├── db/               # Async SQLAlchemy engine & session factory
+│   │   │   ├── middleware/       # Correlation ID & security headers
+│   │   │   ├── models/           # Declarative database models
+│   │   │   ├── repositories/     # Data access layer (Projects, Alerts)
+│   │   │   ├── routes/           # REST API endpoints
+│   │   │   └── services/         # Business logic & AI assistant services
+│   │   └── ingestion/
+│   │       └── loaders/          # Document & database ingestion pipelines
+│   └── tests/
+│       └── test_api.py           # Integration & endpoint test suite
+├── .gitignore                    # Global ignore definitions
+├── pyrightconfig.json            # Editor LSP & type checker configuration
+└── README.md                     # Root project documentation
+```
+
+---
+
+## 🏗 Backend System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -105,61 +140,6 @@ The backend is built following clean, layered architectural principles:
 
 ---
 
-## 📁 Project Directory Structure
-
-```
-PROJECTPULSE_AI/
-├── .env.example                  # Environment configuration template
-├── .gitignore                    # Git ignore specifications
-├── Makefile                      # Quick developer CLI tasks
-├── pyrightconfig.json            # Pyright / LSP configuration
-├── requirements_backend.txt      # Python dependencies
-├── README.md                     # Comprehensive project documentation
-├── data/
-│   ├── raw/                      # Raw incoming project reports (.pdf, .xlsx)
-│   └── staging/                  # Normalized staging data
-├── services/
-│   ├── __init__.py
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── main.py               # FastAPI application entrypoint & lifespan
-│   │   ├── dependencies.py       # Dependency injection providers
-│   │   ├── core/
-│   │   │   ├── cache.py          # CachePort (Redis & InMemory with TTL)
-│   │   │   ├── errors.py         # Custom application exceptions & handlers
-│   │   │   ├── logging.py        # Structured logging utilities
-│   │   │   └── resilience.py     # Retry policies & error boundaries
-│   │   ├── db/
-│   │   │   ├── __init__.py
-│   │   │   └── session.py        # Async SQLAlchemy engine & session maker
-│   │   ├── middleware/
-│   │   │   └── request_id.py     # Request ID correlation & context tracking
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   └── db.py             # SQLAlchemy Declarative Models
-│   │   ├── repositories/
-│   │   │   ├── alert_repo.py     # Alert data persistence logic
-│   │   │   └── project_repo.py   # Project queries & filtering logic
-│   │   ├── routes/
-│   │   │   ├── alerts.py         # /api/v1/alerts endpoints
-│   │   │   ├── assistant.py      # /api/v1/assistant endpoints
-│   │   │   ├── dashboard.py      # /api/v1/dashboard endpoints
-│   │   │   └── projects.py       # /api/v1/projects endpoints
-│   │   └── services/
-│   │       ├── alert_service.py  # AlertEngine detection logic
-│   │       ├── assistant_service.py # Groq AI Assistant grounding service
-│   │       └── project_service.py   # Project business logic
-│   └── ingestion/
-│       ├── __init__.py
-│       └── loaders/
-│           └── db_loader.py      # Data staging & database ingestion loader
-└── tests/
-    ├── __init__.py
-    └── test_api.py               # Automated pytest suite
-```
-
----
-
 ## 🛠 Tech Stack & Dependencies
 
 | Category | Technology / Library | Purpose |
@@ -176,12 +156,12 @@ PROJECTPULSE_AI/
 
 ---
 
-## ⚙️ Environment Configuration
+## ⚙️ Backend Environment Configuration
 
-Create a `.env` file in the root directory by copying the template:
+Inside `backend/`, copy the `.env.example` template:
 
 ```bash
-cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
 ### Environment Variables Reference
@@ -204,7 +184,7 @@ cp .env.example .env
 
 - **Python 3.11+** installed
 - **PostgreSQL 14+** (Optional: TimescaleDB extension enabled)
-- **Redis** (Optional: fallback will activate automatically if Redis is omitted)
+- **Redis** (Optional: fallback activates automatically if Redis is omitted)
 
 ### Step 1: Clone the Repository
 
@@ -227,24 +207,30 @@ python3 -m venv venv_backend
 source venv_backend/bin/activate
 ```
 
-### Step 3: Install Dependencies
+### Step 3: Install Backend Dependencies
 
 ```bash
-pip install -r requirements_backend.txt
+pip install -r backend/requirements.txt
 ```
 
 ---
 
-## ⚡ Running the Services
+## ⚡ Running the Backend Services
 
-### Option A: Using the Makefile
+### Step 1: Navigate to the `backend/` directory
 
+```bash
+cd backend
+```
+
+### Step 2: Start the Server
+
+Using the Makefile:
 ```bash
 make run
 ```
 
-### Option B: Using Uvicorn Directly
-
+Or using Uvicorn directly:
 ```bash
 uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -321,11 +307,8 @@ Once running:
 Run the automated test suite with `pytest`:
 
 ```bash
-# Run all tests
+cd backend
 python -m pytest
-
-# Run with verbose output
-python -m pytest -v
 ```
 
 ---
@@ -338,7 +321,7 @@ python -m pytest -v
    ```
 2. Commit your changes:
    ```bash
-   git commit -m "feat(module): descriptive summary of changes"
+   git commit -m "feat(backend): descriptive summary of changes"
    ```
 3. Push to your branch:
    ```bash
