@@ -54,7 +54,8 @@ export function StatCard({
           {rawDelta}
           {deltaSuffix ? deltaSuffix : ''}
         </span>
-      ) : subLabel ? (
+      ) : null}
+      {subLabel ? (
         <span
           className={cn(
             'text-xs font-medium text-text-secondary',
