@@ -134,7 +134,10 @@ def _generate_project(project_index: int, rng: np.random.Generator) -> pd.DataFr
 
     rows = []
     for m in range(max_months):
-        report_month = (approval_date + timedelta(days=m * 30)).replace(day=1)
+        _total_months = approval_date.month - 1 + m
+        _year = approval_date.year + _total_months // 12
+        _month = _total_months % 12 + 1
+        report_month = date(_year, _month, 1)
 
         # Progress via S-curve
         t_norm = m / max(final_duration_months, 1)
