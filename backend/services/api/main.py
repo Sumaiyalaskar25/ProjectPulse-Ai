@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.responses import JSONResponse
 
-from .routes import dashboard, projects, alerts, assistant
+from .routes import dashboard, projects, alerts, assistant, risk
 from .middleware.request_id import RequestIdMiddleware, get_current_request_id
 from .core.errors import AppException, app_exception_handler, unhandled_exception_handler
 from .core.logging import get_logger
@@ -66,6 +66,7 @@ app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(alerts.router)
 app.include_router(assistant.router)
+app.include_router(risk.router)
 
 # 7. System Endpoints
 @app.get("/health", tags=["system"])
