@@ -121,18 +121,21 @@ def _top_drivers(
 
     # Simple contribution: |value| * importance
     contribs = np.abs(values) * importances
+    total = float(np.sum(contribs)) or 1.0
 
     order = np.argsort(contribs)[::-1][:top_n]
     drivers = []
     for idx in order:
         val = float(values[idx])
         imp = float(importances[idx])
-        contribution = float(contribs[idx])
+        raw_contribution = float(contribs[idx])
+        pct_contribution = (raw_contribution / total) * 100.0
         drivers.append({
             "feature": feature_names[idx],
             "value": round(val, 4),
             "importance": round(imp, 4),
-            "contribution": round(contribution, 4),
+            "contribution": round(raw_contribution, 4),
+            "contribution_pct": round(pct_contribution, 2),
             "direction": "increase" if val > 0 else "decrease",
         })
     return drivers
@@ -321,7 +324,10 @@ def _compute_quick_composite(models: Dict[str, Any], history: List[Dict[str, Any
 
 
 def _summarize_drivers(drivers: List[Dict[str, Any]]) -> str:
-    parts = [f"{d['feature']} ({d['direction']})" for d in drivers[:3]]
+    parts = []
+    for d in drivers[:3]:
+        pct = d.get("contribution_pct", 0.0)
+        parts.append(f"{d['feature']} ({pct:.0f}%, {d['direction']})")
     return "Top drivers: " + ", ".join(parts)
 
 
