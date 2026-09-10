@@ -106,65 +106,76 @@ def _generate_project(project_index: int, rng: np.random.Generator) -> pd.DataFr
     ministry = _pick(MINISTRIES, rng)
     state = _pick(STATES, rng)
 
-    # Base financials (log-normal so most projects are small, few are huge)
-    original_cost = float(np.exp(rng.normal(loc=6.5, scale=1.5)))  # in crores
+    # Base financials (log-normal)
+    original_cost = float(np.exp(rng.normal(loc=6.5, scale=1.5)))
 
     # Duration: 24-72 months
     planned_duration_months = int(rng.integers(24, 73))
 
-    # Approval date: somewhere between 2020-01 and 2023-06
     approval_offset_days = int(rng.integers(0, 365 * 3 + 180))
     approval_date = date(2020, 1, 1) + timedelta(days=approval_offset_days)
-
     original_completion_date = approval_date + timedelta(days=planned_duration_months * 30)
 
-    # Risk profile
+    # Risk profile — used ONLY to set the probability of revision events,
+    # NOT to interpolate the final outcome.
     profile_names = list(RISK_PROFILES.keys())
     profile_weights = [RISK_PROFILES[p][0] for p in profile_names]
     profile = rng.choice(profile_names, p=profile_weights)
     _, delay_mult, cost_mult = RISK_PROFILES[profile]
 
-    # Final outcome
-    final_duration_months = int(planned_duration_months * delay_mult)
-    final_cost = original_cost * cost_mult
+    # Revision event probabilities per month — based on profile
+    # A "bad" profile has higher chance of cost/schedule revisions
+    event_prob = {"good": 0.02, "average": 0.06, "bad": 0.15, "terrible": 0.28}[profile]
+    recovery_prob = 0.03  # small chance to catch up
 
-    # Generate monthly snapshots up to min(final_duration + 3, 36) so we don't
-    # produce 5 years of data for each project
-    max_months = min(final_duration_months + 3, 36)
+    max_months = min(int(planned_duration_months * delay_mult) + 3, 48)
 
+    # ---- Snapshot state that evolves month by month ----
+    revised_cost = original_cost
+    revised_completion = original_completion_date
     rows = []
+
     for m in range(max_months):
         _total_months = approval_date.month - 1 + m
         _year = approval_date.year + _total_months // 12
         _month = _total_months % 12 + 1
         report_month = date(_year, _month, 1)
 
-        # Progress via S-curve
-        t_norm = m / max(final_duration_months, 1)
+        t_norm = m / max(planned_duration_months, 1)
         progress = _s_curve_progress(t_norm, rng)
 
-        # Cumulative expenditure (tracks progress with lag + cost escalation)
+        # Expenditure with realistic noise (not perfectly tracking progress)
         expenditure_ratio = progress / 100.0
-        expenditure = final_cost * expenditure_ratio * float(rng.uniform(0.85, 1.15))
+        expenditure = revised_cost * expenditure_ratio * float(rng.uniform(0.85, 1.15))
         expenditure = max(0.0, expenditure)
 
-        # Revised cost ramps from original to final over the project
-        if m == 0:
-            revised_cost = original_cost
-        else:
-            revised_cost = original_cost + (final_cost - original_cost) * min(1.0, m / max(final_duration_months, 1))
+        # ---- Revision events: occasional jumps (NOT a smooth ramp) ----
+        if m > 0:
+            # Cost revision event
+            if rng.random() < event_prob:
+                # Jump up by 3-15% of original cost
+                jump_pct = rng.uniform(0.03, 0.15)
+                revised_cost = revised_cost * (1.0 + jump_pct)
 
-        # Revised completion date
-        if m < 3:
-            revised_completion = original_completion_date
-        else:
-            delay_days = (final_duration_months - planned_duration_months) * 30
-            revised_completion = original_completion_date + timedelta(
-                days=int(delay_days * min(1.0, m / max(final_duration_months, 1)))
-            )
+            # Schedule revision event
+            if rng.random() < event_prob:
+                # Jump by 1-4 months
+                jump_days = int(rng.uniform(30, 120))
+                revised_completion = revised_completion + timedelta(days=jump_days)
 
-        # Delay reason (only for slow projects past mid-point)
-        if profile in ("bad", "terrible") and progress > 20:
+            # Recovery event (rare): project catches up
+            if rng.random() < recovery_prob:
+                # Reduce slippage by 15-40 days
+                recovery_days = int(rng.uniform(15, 40))
+                revised_completion = max(
+                    original_completion_date,
+                    revised_completion - timedelta(days=recovery_days),
+                )
+                # Reduce revised cost slightly
+                revised_cost = max(original_cost, revised_cost * 0.97)
+
+        # Delay reason text (only when there's been a recent jump)
+        if profile in ("bad", "terrible") and progress > 20 and rng.random() < 0.3:
             delay_reason = _pick(DELAY_REASONS, rng)
         else:
             delay_reason = ""
