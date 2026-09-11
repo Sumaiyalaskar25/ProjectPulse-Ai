@@ -132,3 +132,11 @@ backend/data/processed/*
 backend/data/features/*
 !backend/data/features/.gitkeep
 *.parquet
+
+# Personal demo scripts
+start-demo.ps1
+start-demo.bat
+
+# Personal demo scripts
+start-demo.ps1
+start-demo.bat
