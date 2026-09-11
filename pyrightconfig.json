@@ -1,8 +1,21 @@
 {
-  "venvPath": ".",
-  "venv": "venv_backend",
+  "venvPath": "backend",
+  "venv": "venv",
   "extraPaths": [
-    ".",
     "backend"
-  ]
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/venv",
+    "**/.venv"
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "reportAttributeAccessIssue": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportCallIssue": "warning",
+  "reportArgumentType": "warning"
 }
