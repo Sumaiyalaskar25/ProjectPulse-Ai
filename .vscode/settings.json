@@ -3,5 +3,7 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}/venv_backend/Lib/site-packages",
     "${workspaceFolder}"
-  ]
+  ],
+  "typescript.tsdk": "apps/web/node_modules/typescript/lib",
+  "typescript.preferences.includePackageJsonAutoImports": "on"
 }
