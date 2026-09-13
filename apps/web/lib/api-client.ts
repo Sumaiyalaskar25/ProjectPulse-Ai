@@ -40,6 +40,7 @@ export async function fetchApi<T>(
     try {
       const body = await res.json()
       if (body?.detail) message = body.detail
+      else if (body?.error?.message) message = body.error.message
     } catch {
       // ignore non-JSON error bodies
     }
@@ -54,6 +55,9 @@ export interface ProjectFilters {
   ministry?: string
   state?: string
   tier?: 'critical' | 'high' | 'moderate' | 'stable'
+  search?: string
+  page?: number
+  limit?: number
 }
 
 export interface AlertFilters {
@@ -65,23 +69,33 @@ export interface SimulationPerturbations {
   budget?: number
   clearance?: number
   mobilization?: number
+  [key: string]: number | undefined
 }
 
 export interface CreateInterventionInput {
   project_id: string
-  alert_id: number
+  alert_id?: number
   owner: string
   category: string
   action_description: string
   status: string
-  due_date: string
+  due_date?: string
 }
 
-export function getDashboardSummary(): Promise<DashboardSummary> {
-  return fetchApi<DashboardSummary>('/dashboard/summary')
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const res = await fetchApi<Record<string, any>>('/dashboard/summary')
+  return {
+    total_projects: res.total_projects ?? 0,
+    critical_count: res.critical_count ?? 0,
+    high_count: res.high_count ?? 0,
+    moderate_count: res.moderate_count ?? 0,
+    stable_count: res.stable_count ?? 0,
+    portfolio_value: res.portfolio_value ?? res.total_cost_cr ?? 0,
+    capital_at_risk: res.capital_at_risk ?? res.capital_at_risk_cr ?? 0,
+  }
 }
 
-export function getProjects(
+export async function getProjects(
   filters?: ProjectFilters,
 ): Promise<Project[]> {
   const params = new URLSearchParams()
@@ -89,9 +103,15 @@ export function getProjects(
   if (filters?.ministry) params.set('ministry', filters.ministry)
   if (filters?.state) params.set('state', filters.state)
   if (filters?.tier) params.set('tier', filters.tier)
+  if (filters?.search) params.set('search', filters.search)
+  if (filters?.page) params.set('page', String(filters.page))
+  if (filters?.limit) params.set('limit', String(filters.limit))
 
   const query = params.toString()
-  return fetchApi<Project[]>(`/projects${query ? `?${query}` : ''}`)
+  const res = await fetchApi<any>(`/projects${query ? `?${query}` : ''}`)
+  if (Array.isArray(res)) return res
+  if (res && Array.isArray(res.data)) return res.data
+  return []
 }
 
 export function getProject(id: string): Promise<Project> {
@@ -108,31 +128,49 @@ export function getProjectDrivers(id: string): Promise<RiskScore> {
   return fetchApi<RiskScore>(`/projects/${id}/drivers`)
 }
 
-export function simulateProject(
+export async function simulateProject(
   id: string,
   perturbations: SimulationPerturbations,
+  target: string = 'schedule',
 ): Promise<CounterfactualResult> {
-  return fetchApi<CounterfactualResult>(`/projects/${id}/simulate`, {
+  const cleanPerturbations: Record<string, number> = {}
+  for (const [k, v] of Object.entries(perturbations)) {
+    if (typeof v === 'number') {
+      cleanPerturbations[k] = v
+    }
+  }
+
+  return fetchApi<CounterfactualResult>('/risk/what-if', {
     method: 'POST',
-    body: JSON.stringify(perturbations),
+    body: JSON.stringify({
+      project_id: id,
+      perturbations: cleanPerturbations,
+      target,
+    }),
   })
 }
 
-export function getAlerts(filters?: AlertFilters): Promise<Alert[]> {
+export async function getAlerts(filters?: AlertFilters): Promise<Alert[]> {
   const params = new URLSearchParams()
   if (filters?.severity) params.set('severity', filters.severity)
   if (filters?.status) params.set('status', filters.status)
 
   const query = params.toString()
-  return fetchApi<Alert[]>(`/alerts${query ? `?${query}` : ''}`)
+  const res = await fetchApi<any>(`/alerts${query ? `?${query}` : ''}`)
+  if (Array.isArray(res)) return res
+  if (res && Array.isArray(res.alerts)) return res.alerts
+  return []
 }
 
 export function acknowledgeAlert(id: number): Promise<Alert> {
   return fetchApi<Alert>(`/alerts/${id}/acknowledge`, { method: 'POST' })
 }
 
-export function getInterventions(): Promise<Intervention[]> {
-  return fetchApi<Intervention[]>('/interventions')
+export function getInterventions(projectId?: string): Promise<Intervention[]> {
+  const params = new URLSearchParams()
+  if (projectId) params.set('project_id', projectId)
+  const query = params.toString()
+  return fetchApi<Intervention[]>(`/interventions${query ? `?${query}` : ''}`)
 }
 
 export function createIntervention(

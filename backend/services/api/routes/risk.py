@@ -2,20 +2,25 @@
 """
 ML risk prediction routes.
 
-Calls services.ml.inference.predict.predict_risk() in-process.
-No external service; no HTTP hop.
+Calls services.ml.inference.predict.predict_risk() offloaded to worker thread.
+Returns 503 if model artifacts are not loaded/ready.
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
+import anyio
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 
-from ...ml.inference.predict import predict_risk
+from ...ml.inference.predict import (
+    predict_risk,
+    check_model_readiness,
+    ModelUnavailableException,
+)
 from ...ml.inference.counterfactual import (
     simulate_counterfactual,
     list_actionable_inputs,
 )
-from ..core.errors import AppException
+from ..core.errors import ModelUnavailableError, ValidationError
 from ..core.logging import get_logger
 
 logger = get_logger("risk_routes")
@@ -53,42 +58,66 @@ class WhatIfRequest(BaseModel):
 # ENDPOINTS
 # ------------------------------------------------------------------------
 
+@router.get("/readiness")
+async def model_readiness():
+    """Check whether ML prediction models and artifacts are ready to serve traffic."""
+    readiness = check_model_readiness()
+    return {
+        "status": "ready" if readiness.get("ready") else "unavailable",
+        **readiness
+    }
+
+
 @router.post("/predict")
 async def predict_endpoint(req: ProjectSnapshotIn):
     """
     Predict risk score for a single project snapshot.
-
-    Returns a dict matching RiskScoreOutput schema.
+    Offloaded to a worker thread to prevent event loop blocking.
     """
     try:
-        snapshot = req.dict()
+        snapshot = req.model_dump() if hasattr(req, "model_dump") else req.dict()
         history = snapshot.pop("history", None)
-        result = predict_risk(snapshot, history=history)
+        result = await anyio.to_thread.run_sync(predict_risk, snapshot, history)
         return result
+    except ModelUnavailableException as e:
+        logger.warning(f"Prediction requested but model is unavailable: {e}")
+        raise ModelUnavailableError(str(e))
+    except ValueError as e:
+        raise ValidationError(str(e))
     except Exception as e:
-        logger.exception("predict_risk failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("predict_risk failed unexpectedly")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Risk prediction processing encountered an internal error."
+        )
 
 
 @router.post("/what-if")
 async def what_if_endpoint(req: WhatIfRequest):
     """
     Run a counterfactual simulation.
-
-    Returns dict matching apps/web/types/api.ts::CounterfactualResult.
+    Offloaded to worker thread.
     """
     try:
-        result = simulate_counterfactual(
-            project_id=req.project_id,
-            perturbations=req.perturbations,
-            target=req.target,
-        )
+        def _run_cf():
+            return simulate_counterfactual(
+                project_id=req.project_id,
+                perturbations=req.perturbations,
+                target=req.target,
+            )
+        result = await anyio.to_thread.run_sync(_run_cf)
         return result
+    except ModelUnavailableException as e:
+        logger.warning(f"What-if requested but model is unavailable: {e}")
+        raise ModelUnavailableError(str(e))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
-        logger.exception("simulate_counterfactual failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("simulate_counterfactual failed unexpectedly")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Counterfactual simulation encountered an internal error."
+        )
 
 
 @router.get("/actionable-inputs")

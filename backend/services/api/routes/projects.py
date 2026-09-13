@@ -51,3 +51,33 @@ async def get_project(
     if not project:
         raise NotFoundError(message=f"Project '{project_id}' not found")
     return project
+
+@router.get("/{project_id}/risk-history")
+async def get_project_risk_history(
+    project_id: str,
+    limit: int = Query(12, ge=1, le=60, description="Max history snapshots"),
+    service: ProjectService = Depends(get_project_service)
+):
+    """
+    Retrieve historical risk scores for a project.
+    """
+    project = await service.get_project(project_id)
+    if not project:
+        raise NotFoundError(message=f"Project '{project_id}' not found")
+    return await service.get_risk_history(project_id=project_id, limit=limit)
+
+@router.get("/{project_id}/drivers")
+async def get_project_drivers(
+    project_id: str,
+    service: ProjectService = Depends(get_project_service)
+):
+    """
+    Retrieve latest risk score and top risk drivers for a project.
+    """
+    project = await service.get_project(project_id)
+    if not project:
+        raise NotFoundError(message=f"Project '{project_id}' not found")
+    drivers = await service.get_risk_drivers(project_id)
+    if not drivers:
+        raise NotFoundError(message=f"No risk evaluation records found for project '{project_id}'")
+    return drivers

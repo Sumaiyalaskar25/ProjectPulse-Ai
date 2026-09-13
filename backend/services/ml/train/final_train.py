@@ -72,20 +72,22 @@ def train_final() -> dict:
         raise FileNotFoundError(f"Missing {snap_path}. Run generate_synthetic first.")
     snapshots = pd.read_parquet(snap_path)
 
-    # 2. Compute cutoff
+    # 2. Compute cutoff and build targets
     cutoff = _compute_cutoff(snapshots)
     print(f"Training cutoff: {cutoff.date()}")
     print(f"Lookahead:      {LOOKAHEAD_MONTHS} months")
 
-    train_snapshots = snapshots[snapshots["report_month"] <= cutoff].copy()
-    print(f"Snapshots used: {len(train_snapshots):,} / {len(snapshots):,}")
-
-    # 3. Build targets
+    # Build targets from full snapshot dataset to allow lookahead at cutoff boundary
     print("Building targets...")
     builder = TargetBuilder(lookahead_months=LOOKAHEAD_MONTHS)
-    labels = builder.build(train_snapshots)
-    labels_train = labels[~labels["is_censored"]].copy()
+    all_labels = builder.build(snapshots)
+    labels_train = all_labels[
+        (all_labels["report_month"] <= cutoff) & (~all_labels["is_censored"])
+    ].copy()
     print(f"Trainable labels: {len(labels_train):,}")
+
+    train_snapshots = snapshots[snapshots["report_month"] <= cutoff].copy()
+    print(f"Snapshots used: {len(train_snapshots):,} / {len(snapshots):,}")
 
     # 4. Fit feature engine on TRAIN snapshots
     print("Fitting feature engine...")
@@ -176,7 +178,7 @@ def train_final() -> dict:
         "lookahead_months": LOOKAHEAD_MONTHS,
         "cost_overrun_threshold_pct": COST_OVERRUN_THRESHOLD_PCT,
         "schedule_overrun_threshold_months": SCHEDULE_OVERRUN_THRESHOLD_MONTHS,
-        "training_rows": int(len(merged)),
+        "training_rows": len(merged),
         "training_projects": int(merged["project_id"].nunique()),
         "files": files,
     }

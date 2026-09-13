@@ -1,6 +1,7 @@
 # services/api/repositories/alert_repo.py
 from abc import ABC, abstractmethod
 from typing import Optional, Any, List
+from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,10 @@ class AlertRepository(ABC):
 
     @abstractmethod
     async def insert_alerts(self, alerts: List[dict[str, Any]]) -> List[int]:
+        pass
+
+    @abstractmethod
+    async def acknowledge_alert(self, alert_id: int, assigned_to: Optional[str] = None) -> Optional[dict[str, Any]]:
         pass
 
 class SQLAlchemyAlertRepository(AlertRepository):
@@ -50,7 +55,13 @@ class SQLAlchemyAlertRepository(AlertRepository):
         query += " ORDER BY a.triggered_at DESC LIMIT :limit"
         result = await self.db.execute(text(query), params)
         rows = result.mappings().all()
-        return [dict(r) for r in rows]
+        alerts_list: List[dict[str, Any]] = []
+        for r in rows:
+            alert_dict: dict[str, Any] = {str(k): v for k, v in r.items()}
+            if alert_dict.get("triggered_at"):
+                alert_dict["triggered_at"] = str(alert_dict["triggered_at"])
+            alerts_list.append(alert_dict)
+        return alerts_list
 
     async def insert_alerts(self, alerts: List[dict[str, Any]]) -> List[int]:
         inserted = []
@@ -84,3 +95,25 @@ class SQLAlchemyAlertRepository(AlertRepository):
             
         await self.db.commit()
         return inserted
+
+    async def acknowledge_alert(self, alert_id: int, assigned_to: Optional[str] = None) -> Optional[dict[str, Any]]:
+        stmt = text("""
+            UPDATE alerts
+            SET status = 'acknowledged',
+                acknowledged_at = NOW(),
+                assigned_to = COALESCE(:assigned_to, assigned_to)
+            WHERE alert_id = :alert_id
+            RETURNING alert_id, project_id, alert_type, severity, title, description,
+                      risk_previous, risk_current, risk_delta, status, triggered_at, acknowledged_at
+        """)
+        result = await self.db.execute(stmt, {"alert_id": alert_id, "assigned_to": assigned_to})
+        await self.db.commit()
+        row = result.mappings().first()
+        if not row:
+            return None
+        res: dict[str, Any] = {str(k): v for k, v in row.items()}
+        if res.get("triggered_at"):
+            res["triggered_at"] = str(res["triggered_at"])
+        if res.get("acknowledged_at"):
+            res["acknowledged_at"] = str(res["acknowledged_at"])
+        return res

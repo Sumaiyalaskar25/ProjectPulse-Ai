@@ -40,6 +40,11 @@ export function Topbar({
             {i < lastIndex && <span className="text-text-muted">/</span>}
           </Fragment>
         ))}
+        {process.env.NEXT_PUBLIC_USE_MOCK_DATA !== 'false' && (
+          <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+            DEMO DATA MODE
+          </span>
+        )}
         {breadcrumbRight && (
           <span className="ml-auto font-mono text-xs text-text-muted">
             {breadcrumbRight}

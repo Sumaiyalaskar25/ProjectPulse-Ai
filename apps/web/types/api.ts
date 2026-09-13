@@ -54,12 +54,12 @@ export interface Alert {
 export interface Intervention {
   intervention_id: number
   project_id: string
-  alert_id: number
+  alert_id?: number
   owner: string
   category: string
   action_description: string
   status: string
-  due_date: string
+  due_date?: string
 }
 
 export interface CounterfactualResult {
