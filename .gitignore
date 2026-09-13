@@ -122,3 +122,21 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 [Dd]esktop.ini
+
+# --- ML Artifacts ---
+backend/models/artifacts/*.joblib
+backend/models/artifacts/*.pkl
+backend/models/artifacts/latest.json
+backend/data/processed/*
+!backend/data/processed/.gitkeep
+backend/data/features/*
+!backend/data/features/.gitkeep
+*.parquet
+
+# Personal demo scripts
+start-demo.ps1
+start-demo.bat
+
+# Personal demo scripts
+start-demo.ps1
+start-demo.bat

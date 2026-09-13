@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.responses import JSONResponse
 
-from .routes import dashboard, projects, alerts, assistant
+from .routes import dashboard, projects, alerts, assistant, risk
 from .middleware.request_id import RequestIdMiddleware, get_current_request_id
 from .core.errors import AppException, app_exception_handler, unhandled_exception_handler
 from .core.logging import get_logger
@@ -55,7 +55,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # 5. CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,6 +71,7 @@ app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(alerts.router)
 app.include_router(assistant.router)
+app.include_router(risk.router)
 
 # 7. System Endpoints
 @app.get("/health", tags=["system"])
