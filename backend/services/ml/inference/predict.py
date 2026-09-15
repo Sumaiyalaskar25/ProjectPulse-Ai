@@ -35,10 +35,40 @@ from ..config import (
 
 # ------------------------------------------------------------------------
 # MODEL LOADING (singleton)
+class ModelUnavailableException(Exception):
+    """Raised when model artifacts are missing, corrupt, or uninitialized."""
+    pass
+
+
+# ------------------------------------------------------------------------
+# MODEL LOADING (singleton)
 # ------------------------------------------------------------------------
 
 _MODELS: Optional[Dict[str, Any]] = None
 _MANIFEST: Optional[Dict[str, Any]] = None
+
+
+def check_model_readiness() -> Dict[str, Any]:
+    """Check whether the model manifest and all required artifact files exist."""
+    try:
+        manifest_path = _resolve_latest_manifest()
+        with open(manifest_path, "r") as f:
+            manifest = json.load(f)
+        files = manifest.get("files", {})
+        missing_files = []
+        for key in ["schedule_classifier", "cost_classifier", "schedule_regressor", "cost_regressor", "feature_engine"]:
+            filename = files.get(key)
+            if not filename or not (MODELS_ARTIFACTS_DIR / filename).exists():
+                missing_files.append(f"{key}: {filename}")
+        if missing_files:
+            return {
+                "ready": False,
+                "reason": f"Missing artifact files: {', '.join(missing_files)}",
+                "manifest": manifest.get("model_version"),
+            }
+        return {"ready": True, "model_version": manifest.get("model_version")}
+    except Exception as e:
+        return {"ready": False, "reason": str(e)}
 
 
 def _load_models() -> Dict[str, Any]:
@@ -47,18 +77,27 @@ def _load_models() -> Dict[str, Any]:
     if _MODELS is not None:
         return _MODELS
 
+    readiness = check_model_readiness()
+    if not readiness["ready"]:
+        raise ModelUnavailableException(
+            f"ML model artifacts are not ready: {readiness.get('reason')}. Run training pipeline to generate artifacts."
+        )
+
     manifest_path = _resolve_latest_manifest()
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
 
     files = manifest["files"]
-    _MODELS = {
-        "schedule_classifier": joblib.load(MODELS_ARTIFACTS_DIR / files["schedule_classifier"]),
-        "cost_classifier":     joblib.load(MODELS_ARTIFACTS_DIR / files["cost_classifier"]),
-        "schedule_regressor":  joblib.load(MODELS_ARTIFACTS_DIR / files["schedule_regressor"]),
-        "cost_regressor":      joblib.load(MODELS_ARTIFACTS_DIR / files["cost_regressor"]),
-        "feature_engine":      joblib.load(MODELS_ARTIFACTS_DIR / files["feature_engine"]),
-    }
+    try:
+        _MODELS = {
+            "schedule_classifier": joblib.load(MODELS_ARTIFACTS_DIR / files["schedule_classifier"]),
+            "cost_classifier":     joblib.load(MODELS_ARTIFACTS_DIR / files["cost_classifier"]),
+            "schedule_regressor":  joblib.load(MODELS_ARTIFACTS_DIR / files["schedule_regressor"]),
+            "cost_regressor":      joblib.load(MODELS_ARTIFACTS_DIR / files["cost_regressor"]),
+            "feature_engine":      joblib.load(MODELS_ARTIFACTS_DIR / files["feature_engine"]),
+        }
+    except Exception as e:
+        raise ModelUnavailableException(f"Failed to deserialize model artifacts: {e}") from e
     _MANIFEST = manifest
     return _MODELS
 
@@ -67,13 +106,13 @@ def _resolve_latest_manifest() -> Path:
     """Read latest.txt pointer and return the full path to the manifest."""
     pointer = MODELS_ARTIFACTS_DIR / "latest.txt"
     if not pointer.exists():
-        raise FileNotFoundError(
-            f"Missing {pointer}. Run: python -m services.ml.train.final_train"
+        raise ModelUnavailableException(
+            f"Missing pointer {pointer}. Run: python -m services.ml.train.final_train"
         )
     manifest_name = pointer.read_text().strip()
     manifest_path = MODELS_ARTIFACTS_DIR / manifest_name
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Manifest {manifest_path} not found.")
+        raise ModelUnavailableException(f"Manifest {manifest_path} not found.")
     return manifest_path
 
 

@@ -49,6 +49,14 @@ class ServiceUnavailableError(AppException):
             details=details
         )
 
+class ModelUnavailableError(ServiceUnavailableError):
+    def __init__(self, message: str = "ML model is currently unavailable or uninitialized", details: Optional[Any] = None):
+        super().__init__(
+            message=message,
+            details=details
+        )
+        self.code = "SERVICE_MODEL_UNAVAILABLE"
+
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Handles all domain/application exceptions with standardized JSON response."""
     request_id = get_current_request_id()

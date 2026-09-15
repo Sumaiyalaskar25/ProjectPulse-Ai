@@ -22,7 +22,7 @@ async def get_summary(
     stmt = text("""
         WITH latest_risk AS (
             SELECT project_id, composite_score, tier,
-                   ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY report_month DESC) as rn
+                   ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY report_month DESC, risk_id DESC) as rn
             FROM risk_scores
         ),
         current_risk AS (
@@ -47,21 +47,27 @@ async def get_summary(
         data = {
             "total_projects": 0,
             "total_cost_cr": 0,
+            "portfolio_value": 0,
             "critical_count": 0,
             "high_count": 0,
             "moderate_count": 0,
             "stable_count": 0,
-            "capital_at_risk_cr": 0
+            "capital_at_risk_cr": 0,
+            "capital_at_risk": 0
         }
     else:
+        tot_cost = float(row[1]) if row[1] is not None else 0.0
+        cap_at_risk = float(row[6]) if row[6] is not None else 0.0
         data = {
-            "total_projects": row[0] or 0,
-            "total_cost_cr": row[1] or 0,
-            "critical_count": row[2] or 0,
-            "high_count": row[3] or 0,
-            "moderate_count": row[4] or 0,
-            "stable_count": row[5] or 0,
-            "capital_at_risk_cr": row[6] or 0
+            "total_projects": int(row[0]) if row[0] is not None else 0,
+            "total_cost_cr": tot_cost,
+            "portfolio_value": tot_cost,
+            "critical_count": int(row[2]) if row[2] is not None else 0,
+            "high_count": int(row[3]) if row[3] is not None else 0,
+            "moderate_count": int(row[4]) if row[4] is not None else 0,
+            "stable_count": int(row[5]) if row[5] is not None else 0,
+            "capital_at_risk_cr": cap_at_risk,
+            "capital_at_risk": cap_at_risk
         }
         
     await cache.setex(cache_key, 60, data)

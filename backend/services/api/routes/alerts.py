@@ -1,11 +1,16 @@
 # services/api/routes/alerts.py
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Body
 from typing import Optional
+from pydantic import BaseModel
 from ..dependencies import get_alert_repository, get_alert_engine
 from ..repositories.alert_repo import AlertRepository
 from ..services.alert_service import AlertEngine
+from ..core.errors import NotFoundError
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
+
+class AcknowledgeRequest(BaseModel):
+    assigned_to: Optional[str] = None
 
 @router.get("")
 async def list_alerts(
@@ -17,6 +22,19 @@ async def list_alerts(
     """List active and historical alerts."""
     alerts = await repo.list_alerts(status=status, severity=severity, limit=limit)
     return {"alerts": alerts}
+
+@router.post("/{alert_id}/acknowledge")
+async def acknowledge_alert(
+    alert_id: int,
+    body: Optional[AcknowledgeRequest] = None,
+    repo: AlertRepository = Depends(get_alert_repository)
+):
+    """Acknowledge an alert."""
+    assigned_to = body.assigned_to if body else None
+    result = await repo.acknowledge_alert(alert_id=alert_id, assigned_to=assigned_to)
+    if not result:
+        raise NotFoundError(message=f"Alert with ID {alert_id} not found")
+    return result
 
 @router.post("/run-engine")
 async def trigger_alert_engine(

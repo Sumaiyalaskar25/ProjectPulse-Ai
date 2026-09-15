@@ -1,6 +1,6 @@
 # services/api/repositories/project_repo.py
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Optional, Any, List
 from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.db import Project, ProjectSnapshot, RiskScore
@@ -20,6 +20,14 @@ class ProjectRepository(ABC):
         limit: int = 50,
         cursor: Optional[str] = None
     ) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def get_risk_history(self, project_id: str, limit: int = 12) -> List[dict]:
+        pass
+
+    @abstractmethod
+    async def get_risk_drivers(self, project_id: str) -> Optional[dict]:
         pass
 
 class SQLAlchemyProjectRepository(ProjectRepository):
@@ -118,7 +126,8 @@ class SQLAlchemyProjectRepository(ProjectRepository):
         if filters.get('state'):
             query = query.where(Project.state == filters['state'])
         if filters.get('tier'):
-            query = query.where(RiskScore.tier == filters['tier'])
+            # Case-insensitive tier matching
+            query = query.where(RiskScore.tier.ilike(filters['tier']))
         if filters.get('search'):
             search_term = f"%{filters['search']}%"
             query = query.where(
@@ -168,4 +177,63 @@ class SQLAlchemyProjectRepository(ProjectRepository):
             "total": total or 0,
             "total_pages": ((total - 1) // limit + 1) if (total and total > 0) else 0,
             "next_cursor": next_cursor
+        }
+
+    async def get_risk_history(self, project_id: str, limit: int = 12) -> List[dict]:
+        """Fetch historical risk scores for a project."""
+        stmt = (
+            select(RiskScore)
+            .where(RiskScore.project_id == project_id)
+            .order_by(RiskScore.report_month.desc(), RiskScore.prediction_timestamp.desc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        scores = result.scalars().all()
+        return [
+            {
+                "risk_id": s.risk_id,
+                "project_id": s.project_id,
+                "report_month": str(s.report_month),
+                "cost_risk": s.cost_risk,
+                "schedule_risk": s.schedule_risk,
+                "trajectory_risk": s.trajectory_risk,
+                "composite_score": s.composite_score,
+                "tier": (s.tier or "").lower(),
+                "confidence_score": s.confidence_score or 0.0,
+                "intervention_priority": s.intervention_priority or 0.0,
+                "top_drivers": s.top_drivers or [],
+                "risk_delta": s.risk_delta or 0.0,
+                "predicted_delay_months": s.predicted_delay_months or 0.0,
+                "predicted_cost_overrun_pct": s.predicted_cost_overrun_pct or 0.0,
+            }
+            for s in scores
+        ]
+
+    async def get_risk_drivers(self, project_id: str) -> Optional[dict]:
+        """Fetch latest risk drivers for a project."""
+        stmt = (
+            select(RiskScore)
+            .where(RiskScore.project_id == project_id)
+            .order_by(RiskScore.report_month.desc(), RiskScore.prediction_timestamp.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        s = result.scalar_one_or_none()
+        if not s:
+            return None
+        return {
+            "risk_id": s.risk_id,
+            "project_id": s.project_id,
+            "report_month": str(s.report_month),
+            "cost_risk": s.cost_risk,
+            "schedule_risk": s.schedule_risk,
+            "trajectory_risk": s.trajectory_risk,
+            "composite_score": s.composite_score,
+            "tier": (s.tier or "").lower(),
+            "confidence_score": s.confidence_score or 0.0,
+            "intervention_priority": s.intervention_priority or 0.0,
+            "top_drivers": s.top_drivers or [],
+            "risk_delta": s.risk_delta or 0.0,
+            "predicted_delay_months": s.predicted_delay_months or 0.0,
+            "predicted_cost_overrun_pct": s.predicted_cost_overrun_pct or 0.0,
         }
