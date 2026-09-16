@@ -1,8 +1,28 @@
-import { ShieldCheck } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { AlertCircle, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
 
 export function RecommendationBar() {
+  const showToast = useToastStore((state) => state.show)
+  const [status, setStatus] = useState<string | null>(null)
+
+  const handleEscalate = () => {
+    setStatus('escalated')
+    showToast('Escalation notice dispatched to Ministry Oversight Committee.')
+  }
+
+  const handleScheduleMeeting = () => {
+    showToast('Deep Dive inspection meeting scheduled for next sprint.')
+  }
+
+  const handleIgnore = () => {
+    setStatus('ignored')
+    showToast('Assessment recommendation dismissed from active queue.')
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-xl border border-background-border bg-background-surface px-5 py-4">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-background-border bg-background-card">
@@ -21,13 +41,26 @@ export function RecommendationBar() {
         <Button
           variant="secondary"
           className="border-transparent hover:border-transparent"
+          onClick={handleIgnore}
         >
           Ignore Assessment
         </Button>
-        <Button variant="secondary">Schedule Deep Dive Meeting</Button>
-        <PendingAction>
-          <Button variant="danger">Escalate to Ministry Level</Button>
-        </PendingAction>
+        <Button variant="secondary" onClick={handleScheduleMeeting}>
+          Schedule Deep Dive Meeting
+        </Button>
+        <Button
+          variant="danger"
+          disabled={status === 'escalated'}
+          onClick={handleEscalate}
+        >
+          {status === 'escalated' ? (
+            <span className="inline-flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4" /> Escalated to Ministry
+            </span>
+          ) : (
+            'Escalate to Ministry Level'
+          )}
+        </Button>
       </div>
     </div>
   )

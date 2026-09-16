@@ -1,4 +1,7 @@
-import { ChevronDown, Download, Search } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { ChevronDown, Download, RefreshCw, Search } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { DeterioratingProjectsTable } from '@/components/risk-analytics/DeterioratingProjectsTable'
 import { RiskDonut } from '@/components/risk-analytics/RiskDonut'
@@ -8,10 +11,10 @@ import { RiskTrajectory } from '@/components/risk-analytics/RiskTrajectory'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
 import { StatCard } from '@/components/ui/StatCard'
 import { pageTitle } from '@/lib/design-tokens'
 import { cn } from '@/lib/utils'
+import { useToastStore } from '@/lib/toast-store'
 
 const FILTER_DROPDOWNS = [
   'All Ministries',
@@ -22,6 +25,25 @@ const FILTER_DROPDOWNS = [
 ]
 
 export default function RiskAnalyticsPage() {
+  const showToast = useToastStore((state) => state.show)
+  const [isReRunning, setIsReRunning] = useState(false)
+
+  const handleExport = () => {
+    showToast('Exporting portfolio risk intelligence dossier as PDF/CSV.')
+  }
+
+  const handleComparePeriod = () => {
+    showToast('Comparing Q3 2023 vs Q2 2023 portfolio risk delta.')
+  }
+
+  const handleReRunModel = () => {
+    setIsReRunning(true)
+    setTimeout(() => {
+      setIsReRunning(false)
+      showToast('Risk model execution completed. 1,775 assets re-scored.')
+    }, 800)
+  }
+
   return (
     <AppShell
       activeNav="Risk Analytics"
@@ -45,15 +67,13 @@ export default function RiskAnalyticsPage() {
               Last Model Run: Oct 27, 2023 14:32:01 UTC
             </p>
             <div className="flex items-center gap-2">
-              <PendingAction>
-                <Button variant="secondary">Compare Period</Button>
-              </PendingAction>
-              <PendingAction>
-                <Button variant="primary">
-                  <Download className="h-4 w-4" />
-                  Export Analysis
-                </Button>
-              </PendingAction>
+              <Button variant="secondary" onClick={handleComparePeriod}>
+                Compare Period
+              </Button>
+              <Button variant="primary" onClick={handleExport}>
+                <Download className="h-4 w-4" />
+                Export Analysis
+              </Button>
             </div>
           </div>
         </header>
@@ -72,6 +92,7 @@ export default function RiskAnalyticsPage() {
             <button
               key={label}
               type="button"
+              onClick={() => showToast(`Filtered by ${label}`)}
               className="inline-flex items-center gap-2 rounded-full border border-background-border bg-background-surface px-4 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
             >
               {label}
@@ -80,13 +101,14 @@ export default function RiskAnalyticsPage() {
           ))}
           <button
             type="button"
+            onClick={() => showToast('Opening multidimensional filter panel.')}
             className="inline-flex items-center gap-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
           >
             Advanced Filters
           </button>
         </Card>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Portfolio Risk Score"
             value="64.8%"
@@ -114,12 +136,12 @@ export default function RiskAnalyticsPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RiskLandscape />
           <RiskDonut />
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RiskTrajectory />
           <RiskDrivers />
         </div>
@@ -137,9 +159,14 @@ export default function RiskAnalyticsPage() {
             Executive Summary: Portfolio sensitivity is within baseline
             (+/- 5%) for 82% of assets.
           </p>
-          <PendingAction>
-            <Button variant="secondary">Re-Run Model</Button>
-          </PendingAction>
+          <Button
+            variant="secondary"
+            disabled={isReRunning}
+            onClick={handleReRunModel}
+          >
+            <RefreshCw className={cn('h-4 w-4', isReRunning && 'animate-spin')} />
+            {isReRunning ? 'Re-Running...' : 'Re-Run Model'}
+          </Button>
         </Card>
       </div>
     </AppShell>

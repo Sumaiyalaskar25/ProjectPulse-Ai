@@ -1,77 +1,104 @@
+'use client'
+
 import { Badge } from '@/components/ui/Badge'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
 
-const ROWS = [
-  {
-    project: 'NH-44 Expressway Ext.',
-    budget: '4.2B Cr',
-    overrun: '+34.2%',
-    status: 'CRITICAL',
-    variant: 'critical' as const,
-  },
-  {
-    project: 'Mumbai Metro Line 3',
-    budget: '12.8B Cr',
-    overrun: '+18.5%',
-    status: 'AT RISK',
-    variant: 'high' as const,
-  },
-  {
-    project: 'Chennai Smart Grid',
-    budget: '1.5B Cr',
-    overrun: '+22.1%',
-    status: 'AT RISK',
-    variant: 'high' as const,
-  },
-]
+interface ResultsTableProps {
+  data?: Record<string, unknown>[]
+}
 
-export function ResultsTable() {
+export function ResultsTable({ data }: ResultsTableProps) {
+  const showToast = useToastStore((state) => state.show)
+
+  if (!data || data.length === 0) {
+    return null
+  }
+
+  const columns = Object.keys(data[0])
+
+  const handleExport = () => {
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [
+        columns.join(','),
+        ...data.map((row) =>
+          columns
+            .map((col) => `"${String(row[col] ?? '').replace(/"/g, '""')}"`)
+            .join(','),
+        ),
+      ].join('\n')
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `query_result_${Date.now()}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showToast('Data exported as CSV successfully.')
+  }
+
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-background-border">
       <div className="flex items-center justify-between gap-3 bg-background-surface px-4 py-3">
         <p className="text-sm font-bold text-text-primary">
-          ▦ Project Budget Variance Audit
+          ▦ Structured Query Result ({data.length} records)
         </p>
-        <PendingAction>
-          <button
-            type="button"
-            className="text-xs font-semibold text-status-info transition-colors hover:text-sky-300"
-          >
-            Export Data
-          </button>
-        </PendingAction>
+        <button
+          type="button"
+          onClick={handleExport}
+          className="text-xs font-semibold text-status-info transition-colors hover:text-sky-300"
+        >
+          Export CSV
+        </button>
       </div>
-      <table className="w-full text-left">
-        <thead>
-          <tr className="border-y border-background-border bg-background-card text-xs font-bold uppercase tracking-wider text-text-muted">
-            <th scope="col" className="py-2 pl-4 pr-3">Project</th>
-            <th scope="col" className="px-3 py-2">Budget (Cr)</th>
-            <th scope="col" className="px-3 py-2">Overrun</th>
-            <th scope="col" className="py-2 pl-3 pr-4 text-right">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ROWS.map((row) => (
-            <tr
-              key={row.project}
-              className="border-b border-background-border last:border-0"
-            >
-              <td className="py-2.5 pl-4 pr-3 text-sm font-semibold text-text-primary">
-                {row.project}
-              </td>
-              <td className="px-3 py-2.5 font-mono text-sm text-text-secondary">
-                {row.budget}
-              </td>
-              <td className="px-3 py-2.5 font-mono text-sm font-bold text-status-critical">
-                {row.overrun}
-              </td>
-              <td className="py-2.5 pl-3 pr-4 text-right">
-                <Badge variant={row.variant}>{row.status}</Badge>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-y border-background-border bg-background-card text-xs font-bold uppercase tracking-wider text-text-muted">
+              {columns.map((col) => (
+                <th key={col} scope="col" className="px-3 py-2">
+                  {col.replace(/_/g, ' ')}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row, idx) => (
+              <tr
+                key={idx}
+                className="border-b border-background-border last:border-0"
+              >
+                {columns.map((col) => {
+                  const val = String(row[col] ?? '')
+                  const isStatus =
+                    col.toLowerCase().includes('status') ||
+                    col.toLowerCase().includes('tier') ||
+                    col.toLowerCase().includes('risk')
+                  return (
+                    <td
+                      key={col}
+                      className="px-3 py-2.5 font-mono text-sm text-text-secondary"
+                    >
+                      {isStatus && val.toUpperCase() === 'CRITICAL' ? (
+                        <Badge variant="critical">{val}</Badge>
+                      ) : isStatus && val.toUpperCase() === 'HIGH' ? (
+                        <Badge variant="high">{val}</Badge>
+                      ) : isStatus && val.toUpperCase() === 'MODERATE' ? (
+                        <Badge variant="moderate">{val}</Badge>
+                      ) : isStatus && val.toUpperCase() === 'STABLE' ? (
+                        <Badge variant="stable">{val}</Badge>
+                      ) : (
+                        val
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

@@ -25,29 +25,53 @@ export class ApiError extends Error {
 
 export async function fetchApi<T>(
   endpoint: string,
-  options?: RequestInit,
+  options?: RequestInit & { timeoutMs?: number },
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-    ...options,
-  })
+  const timeoutMs = options?.timeoutMs ?? 10000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  if (!res.ok) {
-    let message = res.statusText
-    try {
-      const body = await res.json()
-      if (body?.detail) message = body.detail
-      else if (body?.error?.message) message = body.error.message
-    } catch {
-      // ignore non-JSON error bodies
+  try {
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': 'pp_live_demo_secret_key_2026',
+        ...(options?.headers ?? {}),
+      },
+      signal: controller.signal,
+      ...options,
+    })
+
+    if (!res.ok) {
+      let message = res.statusText
+      try {
+        const body = await res.json()
+        if (body?.detail) message = body.detail
+        else if (body?.error?.message) message = body.error.message
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      throw new ApiError(message, res.status, res.statusText)
     }
-    throw new ApiError(message, res.status, res.statusText)
-  }
 
-  return (await res.json()) as T
+    return (await res.json()) as T
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new ApiError(`Request timeout after ${timeoutMs}ms`, 408, 'Request Timeout')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+export interface PaginatedProjects {
+  data: Project[]
+  page: number
+  limit: number
+  total: number
+  total_pages: number
+  next_cursor?: string | null
 }
 
 export interface ProjectFilters {

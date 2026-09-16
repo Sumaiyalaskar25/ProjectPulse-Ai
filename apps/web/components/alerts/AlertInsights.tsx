@@ -1,24 +1,28 @@
-import { ArrowRight, Maximize2, MessageSquare } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { ArrowRight, Maximize2, MessageSquare, ShieldCheck, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
 const RECOMMENDATIONS = [
   {
     badge: '92% Match',
-    badgeVariant: 'stable',
+    badgeVariant: 'stable' as const,
     title: 'Immediate Site Inspection & Thermal Map Sync',
     link: 'View Model Logic',
   },
   {
     badge: '74% Match',
-    badgeVariant: 'moderate',
+    badgeVariant: 'moderate' as const,
     title: 'Structural Sensor Calibration (Remote)',
     link: 'Details',
   },
-] as const
+]
 
 const TIMELINE = [
   {
@@ -44,8 +48,21 @@ const TIMELINE = [
 ]
 
 export function AlertInsights() {
+  const showToast = useToastStore((state) => state.show)
+  const router = useRouter()
+  const [executed, setExecuted] = useState(false)
+
+  const handleDiscuss = () => {
+    router.push('/assistant')
+  }
+
+  const handleExecute = () => {
+    setExecuted(true)
+    showToast('Dispatched automated structural calibration protocol.')
+  }
+
   return (
-    <Card className="flex w-full shrink-0 flex-col gap-5 md:w-[360px]">
+    <Card className="flex w-full shrink-0 flex-col gap-5 lg:w-[360px]">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-text-primary">
           📄 Alert Insights
@@ -53,6 +70,7 @@ export function AlertInsights() {
         <button
           type="button"
           aria-label="Expand insights"
+          onClick={() => showToast('Displaying full anomaly telemetry trace.')}
           className="text-text-secondary transition-colors hover:text-text-primary"
         >
           <Maximize2 className="h-4 w-4" />
@@ -92,6 +110,7 @@ export function AlertInsights() {
               </p>
               <button
                 type="button"
+                onClick={() => showToast(`Opening policy details: ${rec.title}`)}
                 className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-status-info transition-colors hover:text-sky-300"
               >
                 {rec.link}
@@ -136,17 +155,26 @@ export function AlertInsights() {
       </div>
 
       <div className="flex gap-2 border-t border-background-border pt-4">
-        <PendingAction>
-          <Button variant="secondary" className="flex-1">
-            <MessageSquare className="h-4 w-4" />
-            Discuss
-          </Button>
-        </PendingAction>
-        <PendingAction>
-          <Button variant="primary" className="flex-1">
-            Execute
-          </Button>
-        </PendingAction>
+        <Button variant="secondary" className="flex-1" onClick={handleDiscuss}>
+          <MessageSquare className="h-4 w-4" />
+          Discuss
+        </Button>
+        <Button
+          variant="primary"
+          className="flex-1"
+          disabled={executed}
+          onClick={handleExecute}
+        >
+          {executed ? (
+            <span className="inline-flex items-center gap-1">
+              <ShieldCheck className="h-4 w-4 text-status-stable" /> Dispatched
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Zap className="h-4 w-4" /> Execute
+            </span>
+          )}
+        </Button>
       </div>
     </Card>
   )

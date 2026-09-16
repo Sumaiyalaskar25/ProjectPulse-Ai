@@ -5,8 +5,8 @@ import { RecommendationBar } from '@/components/project-deep-dive/Recommendation
 import { RiskDrivers } from '@/components/project-deep-dive/RiskDrivers'
 import { RiskMetrics } from '@/components/project-deep-dive/RiskMetrics'
 import { RiskTrajectory } from '@/components/project-deep-dive/RiskTrajectory'
+import { notFound } from 'next/navigation'
 import {
-  FALLBACK_PROJECT_ID,
   getProjectById,
   PROJECT_META,
   RISK_PERCENT,
@@ -19,16 +19,23 @@ interface ProjectDeepDivePageProps {
 export default function ProjectDeepDivePage({
   params,
 }: ProjectDeepDivePageProps) {
-  const project =
-    getProjectById(params.id) ?? getProjectById(FALLBACK_PROJECT_ID)!
+  const project = getProjectById(params.id)
+  
+  if (!project) {
+    notFound()
+  }
+
   const riskPct = RISK_PERCENT[project.risk]
-  const meta = PROJECT_META[project.id]
+  const meta = PROJECT_META[project.id] ?? {
+    baselineEnd: 'N/A',
+    progress: 0,
+  }
 
   return (
     <AppShell
       activeNav="National Assets"
-      breadcrumb={['Dashboard', 'Project Deep Dive']}
-      breadcrumbRight="INTERNAL REF: ASSET-NH44-EXT-001"
+      breadcrumb={['Dashboard', 'Project Deep Dive', project.name]}
+      breadcrumbRight={`INTERNAL REF: ${project.id}`}
     >
       <div className="flex flex-col gap-6">
         <ProjectHeader

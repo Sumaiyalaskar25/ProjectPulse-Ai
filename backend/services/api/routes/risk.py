@@ -8,7 +8,8 @@ Returns 503 if model artifacts are not loaded/ready.
 
 from typing import Any, Dict, List, Optional
 import anyio
-from fastapi import APIRouter, HTTPException, status
+import anyio.to_thread
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 
 from ...ml.inference.predict import (
@@ -22,6 +23,8 @@ from ...ml.inference.counterfactual import (
 )
 from ..core.errors import ModelUnavailableError, ValidationError
 from ..core.logging import get_logger
+from ..middleware.rate_limit import rate_limit
+from ..core.auth import get_current_user, AuthenticatedUser
 
 logger = get_logger("risk_routes")
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
@@ -69,13 +72,17 @@ async def model_readiness():
 
 
 @router.post("/predict")
-async def predict_endpoint(req: ProjectSnapshotIn):
+async def predict_endpoint(
+    req: ProjectSnapshotIn,
+    _limiter: None = Depends(rate_limit(max_requests=60, window_seconds=60)),
+    user: AuthenticatedUser = Depends(get_current_user)
+):
     """
     Predict risk score for a single project snapshot.
     Offloaded to a worker thread to prevent event loop blocking.
     """
     try:
-        snapshot = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        snapshot = req.model_dump()
         history = snapshot.pop("history", None)
         result = await anyio.to_thread.run_sync(predict_risk, snapshot, history)
         return result
@@ -93,7 +100,11 @@ async def predict_endpoint(req: ProjectSnapshotIn):
 
 
 @router.post("/what-if")
-async def what_if_endpoint(req: WhatIfRequest):
+async def what_if_endpoint(
+    req: WhatIfRequest,
+    _limiter: None = Depends(rate_limit(max_requests=60, window_seconds=60)),
+    user: AuthenticatedUser = Depends(get_current_user)
+):
     """
     Run a counterfactual simulation.
     Offloaded to worker thread.

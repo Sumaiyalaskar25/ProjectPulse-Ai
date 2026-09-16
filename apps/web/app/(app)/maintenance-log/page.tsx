@@ -1,14 +1,42 @@
-import { Download } from 'lucide-react'
+'use client'
+
+import { Download, Plus } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { MaintenanceWorkspace } from '@/components/maintenance-log/MaintenanceWorkspace'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { PendingAction } from '@/components/ui/PendingAction'
 import { StatCard } from '@/components/ui/StatCard'
 import { pageTitle } from '@/lib/design-tokens'
 import { cn } from '@/lib/utils'
+import { MAINTENANCE_RECORDS } from '@/lib/maintenance-records'
+import { useToastStore } from '@/lib/toast-store'
 
 export default function MaintenanceLogPage() {
+  const showToast = useToastStore((state) => state.show)
+
+  const handleExport = () => {
+    const csvHeader = 'Log ID,Asset ID,Project Name,Task Type,Priority,Team,Status,Last Check,Due\n'
+    const csvRows = MAINTENANCE_RECORDS.map(
+      (r) =>
+        `"${r.logId}","${r.assetId}","${r.name}","${r.taskType}","${r.priority}","${r.team}","${r.status}","${r.lastCheck}","${r.due}"`,
+    ).join('\n')
+
+    const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `maintenance_log_${Date.now()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('Maintenance and intervention records exported as CSV.')
+  }
+
+  const handleSchedule = () => {
+    showToast('Scheduled new preventative maintenance service window.')
+  }
+
   return (
     <AppShell
       activeNav="Maintenance Log"
@@ -29,19 +57,18 @@ export default function MaintenanceLogPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <PendingAction>
-              <Button variant="secondary">
-                <Download className="h-4 w-4" />
-                Export Log
-              </Button>
-            </PendingAction>
-            <PendingAction>
-              <Button variant="primary">Schedule Maintenance</Button>
-            </PendingAction>
+            <Button variant="secondary" onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Export Log
+            </Button>
+            <Button variant="primary" onClick={handleSchedule}>
+              <Plus className="h-4 w-4" />
+              Schedule Maintenance
+            </Button>
           </div>
         </header>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Records"
             value="2,486"

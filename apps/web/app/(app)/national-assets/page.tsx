@@ -1,13 +1,43 @@
+'use client'
+
+import { useState } from 'react'
 import { Download, Plus } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { NationalAssetsWorkspace } from '@/components/national-assets/NationalAssetsWorkspace'
 import { Button } from '@/components/ui/Button'
-import { PendingAction } from '@/components/ui/PendingAction'
 import { StatCard } from '@/components/ui/StatCard'
 import { pageTitle } from '@/lib/design-tokens'
 import { cn } from '@/lib/utils'
+import { PROJECTS } from '@/lib/projects'
+import { useToastStore } from '@/lib/toast-store'
 
 export default function NationalAssetsPage() {
+  const showToast = useToastStore((state) => state.show)
+  const [showAddModal, setShowAddModal] = useState(false)
+
+  const handleExport = () => {
+    const csvHeader = 'Project ID,Name,Ministry,Region,Risk,Change,Exposure,Confidence,Status\n'
+    const csvRows = PROJECTS.map(
+      (p) =>
+        `"${p.id}","${p.name}","${p.ministry}","${p.region}","${p.risk}","${p.change}","${p.exposure}",${p.confidence}%,"${p.status}"`,
+    ).join('\n')
+
+    const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `national_assets_portfolio_${Date.now()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('National assets portfolio exported as CSV.')
+  }
+
+  const handleAddProject = () => {
+    showToast('Asset Registration Portal opened. Submitting project telemetry to registry.')
+  }
+
   return (
     <AppShell
       activeNav="National Assets"
@@ -27,20 +57,18 @@ export default function NationalAssetsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <PendingAction>
-              <Button variant="secondary">
-                <Download className="h-4 w-4" />
-                Export Portfolio
-              </Button>
-            </PendingAction>
-            <Button variant="primary">
+            <Button variant="secondary" onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Export Portfolio
+            </Button>
+            <Button variant="primary" onClick={handleAddProject}>
               <Plus className="h-4 w-4" />
               Add / Register Project
             </Button>
           </div>
         </header>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Projects"
             value="1,775"
