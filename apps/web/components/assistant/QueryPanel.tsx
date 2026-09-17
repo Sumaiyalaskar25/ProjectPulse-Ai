@@ -1,35 +1,65 @@
+'use client'
+
 import { Download, MessageSquare, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { useAssistantStore } from '@/lib/assistant-store'
+import { useToastStore } from '@/lib/toast-store'
 
 const QUICK_ACTIONS = [
   {
     icon: '📊',
     label: 'Analyze Overruns',
-    description: 'Compare budget vs actuals for NH corridors.',
+    description: 'Compare budget vs actuals for highway corridors.',
+    query: 'Analyze the highest budget overruns across highway and transport projects.',
   },
   {
     icon: '✨',
     label: 'Risk Forecast',
-    description: 'Project delays for Segment VII based on weather.',
+    description: 'Project delays and trajectory across critical assets.',
+    query: 'Which projects have the highest predicted delay in the next 12 months?',
   },
   {
     icon: '🗄',
     label: 'Data Audit',
-    description: 'Validate sensor logs from Section IX pylons.',
+    description: 'Validate data freshness and anomalies across ministries.',
+    query: 'Show a breakdown of projects by ministry and risk tier.',
   },
 ]
 
 const SESSIONS = [
-  { title: 'NH-44 Bridge Risk Analysis', date: 'Oct 24, 2023' },
-  { title: 'Monsoon Impact Projection', date: 'Oct 22, 2023' },
-  { title: 'Mumbai Metro Phase 3 Budget', date: 'Oct 18, 2023' },
-  { title: 'Solar Park Grid Integration', date: 'Oct 15, 2023' },
+  {
+    title: 'NH-44 Bridge Risk Analysis',
+    date: 'Oct 24, 2023',
+    query: 'Provide a detailed status on NH-44 Expressway Extension and its key risk drivers.',
+  },
+  {
+    title: 'Monsoon Impact Projection',
+    date: 'Oct 22, 2023',
+    query: 'How does seasonal monsoon rainfall impact construction schedules in the Eastern region?',
+  },
+  {
+    title: 'Mumbai Metro Phase 3 Budget',
+    date: 'Oct 18, 2023',
+    query: 'What is the current cost overrun and completion trajectory for Mumbai Metro Phase 3?',
+  },
+  {
+    title: 'Solar Park Grid Integration',
+    date: 'Oct 15, 2023',
+    query: 'List power and energy projects with critical transmission bottlenecks.',
+  },
 ]
 
 export function QueryPanel() {
+  const { sendMessage, clearChat, exportChat, currentSessionId } = useAssistantStore()
+  const showToast = useToastStore((state) => state.show)
+
   return (
     <div className="flex w-[320px] shrink-0 flex-col gap-4">
-      <Button variant="primary" className="w-full">
+      <Button
+        variant="primary"
+        className="w-full"
+        onClick={clearChat}
+      >
         <Plus className="h-4 w-4" />
         New Intelligence Query
       </Button>
@@ -38,6 +68,9 @@ export function QueryPanel() {
         <button
           key={action.label}
           type="button"
+          onClick={() => {
+            void sendMessage(action.query)
+          }}
           className="flex items-start gap-3 rounded-xl border border-background-border bg-background-surface p-4 text-left transition-colors hover:border-text-muted/40 hover:bg-background-card"
         >
           <span className="text-lg leading-none">{action.icon}</span>
@@ -58,6 +91,7 @@ export function QueryPanel() {
         </h3>
         <button
           type="button"
+          onClick={() => showToast('Displaying 4 recorded executive sessions.')}
           className="text-xs font-semibold text-status-info transition-colors hover:text-sky-300"
         >
           View All
@@ -69,6 +103,9 @@ export function QueryPanel() {
           <button
             key={session.title}
             type="button"
+            onClick={() => {
+              void sendMessage(session.query)
+            }}
             className="flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-background-card"
           >
             <MessageSquare className="h-4 w-4 shrink-0 text-text-muted" />
@@ -88,12 +125,13 @@ export function QueryPanel() {
             Session Logs
           </p>
           <p className="mt-0.5 font-mono text-xs text-text-secondary">
-            ID: PULSE-2710-X
+            ID: {currentSessionId}
           </p>
         </div>
         <button
           type="button"
           aria-label="Download session logs"
+          onClick={exportChat}
           className="text-text-secondary transition-colors hover:text-text-primary"
         >
           <Download className="h-4 w-4" />

@@ -3,7 +3,6 @@ import { AlertTriangle } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { AlertsWorkspace } from '@/components/alerts/AlertsWorkspace'
 import { Button } from '@/components/ui/Button'
-import { PendingAction } from '@/components/ui/PendingAction'
 import { pageTitle } from '@/lib/design-tokens'
 import { cn } from '@/lib/utils'
 
@@ -24,15 +23,15 @@ export default function AlertsPage() {
                 INTERVENTION &amp; ALERT TRIAGE QUEUE
               </h1>
               <p className="mt-1 text-sm text-text-secondary">
-                Prioritizing 142 active anomalies across national infrastructure
+                Prioritizing active anomalies across national infrastructure
                 assets.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <PendingAction>
-              <Button variant="secondary">View History</Button>
-            </PendingAction>
+            <Button asChild variant="secondary">
+              <Link href="/maintenance-log">Intervention History</Link>
+            </Button>
             <Button asChild variant="secondary">
               <Link href="/dashboard">Command Dashboard</Link>
             </Button>

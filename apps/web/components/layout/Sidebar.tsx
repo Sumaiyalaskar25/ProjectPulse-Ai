@@ -40,7 +40,7 @@ interface SidebarProps {
 
 export function Sidebar({ active }: SidebarProps) {
   return (
-    <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-background-border bg-background-surface">
+    <aside className="hidden md:flex h-full w-[240px] lg:w-[260px] shrink-0 flex-col border-r border-background-border bg-background-surface">
       <div className="flex items-center gap-3 px-6 py-5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background-card">
           <Activity className="h-5 w-5 text-status-info" />

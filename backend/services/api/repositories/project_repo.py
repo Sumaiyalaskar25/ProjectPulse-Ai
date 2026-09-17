@@ -95,15 +95,15 @@ class SQLAlchemyProjectRepository(ProjectRepository):
             )
             .select_from(Project)
             .outerjoin(
+                latest_snapshot_subq,
+                latest_snapshot_subq.c.project_id == Project.project_id
+            )
+            .outerjoin(
                 ProjectSnapshot,
                 and_(
                     ProjectSnapshot.project_id == Project.project_id,
                     ProjectSnapshot.report_month == latest_snapshot_subq.c.latest_month
                 )
-            )
-            .outerjoin(
-                latest_snapshot_subq,
-                latest_snapshot_subq.c.project_id == Project.project_id
             )
             .outerjoin(
                 latest_risk_subq,
@@ -136,16 +136,13 @@ class SQLAlchemyProjectRepository(ProjectRepository):
                 (Project.implementing_agency.ilike(search_term))
             )
         
-        if cursor:
-            query = query.where(Project.project_id > cursor)
-
-        # Count total records for pagination
+        # Count total records matching filters independently (BUG-018 fix)
         total_query = select(func.count()).select_from(query.subquery())
         total = await self.db.scalar(total_query)
         
-        # Cursor vs offset pagination
+        # Apply cursor or page offset for windowing
         if cursor:
-            query = query.order_by(Project.project_id).limit(limit)
+            query = query.where(Project.project_id > cursor).order_by(Project.project_id).limit(limit)
         else:
             query = query.order_by(Project.project_id).offset((page - 1) * limit).limit(limit)
             

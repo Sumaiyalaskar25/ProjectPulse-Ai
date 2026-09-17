@@ -1,7 +1,9 @@
+'use client'
+
+import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
 import { cn } from '@/lib/utils'
 
 interface DeterioratingProject {
@@ -94,14 +96,14 @@ export function DeterioratingProjectsTable() {
               <th scope="col" className="px-4 py-3">Primary Driver</th>
               <th scope="col" className="px-4 py-3">Exposure</th>
               <th scope="col" className="px-4 py-3">Confidence</th>
-              <th scope="col" className="py-3 pl-4 pr-6 text-right">Action</th>
+              <th scope="col" className="py-4 pl-4 pr-6 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {ROWS.map((project) => (
               <tr
                 key={project.id}
-                className="border-b border-background-border last:border-0"
+                className="border-b border-background-border last:border-0 hover:bg-background-card/40 transition-colors"
               >
                 <td className="py-4 pl-6 pr-4">
                   <p className="text-sm font-semibold text-text-primary">
@@ -147,14 +149,13 @@ export function DeterioratingProjectsTable() {
                   </div>
                 </td>
                 <td className="py-4 pl-4 pr-6 text-right">
-                  <PendingAction>
-                    <button
-                      type="button"
-                      className="text-sm font-medium text-status-info transition-colors hover:underline"
-                    >
-                      View
-                    </button>
-                  </PendingAction>
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-status-info transition-colors hover:text-sky-300"
+                  >
+                    View
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
                 </td>
               </tr>
             ))}

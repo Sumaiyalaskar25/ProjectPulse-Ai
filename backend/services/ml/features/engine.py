@@ -27,7 +27,7 @@ Feature families (about 30 features):
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -106,6 +106,7 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
 
     def __init__(self):
         self.onehot: Optional[OneHotEncoder] = None
+        self.sector_encoder: Optional[OneHotEncoder] = None
         self.bucket_edges: Optional[np.ndarray] = None
         self.sector_benchmarks: Optional[pd.DataFrame] = None
         self.feature_cols: List[str] = []
@@ -117,47 +118,58 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
         self._validate_input(X)
         df = self._prepare_types(X)
 
-        # 1. OneHotEncoder for categoricals
+        # 1. OneHotEncoder for all categoricals
         self.onehot = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
         self.onehot.fit(df[CATEGORICAL_COLS].fillna("Unknown"))
 
+        # 1b. Dedicated Sector encoder (BUG-003 fix: never conflate with ministry/state)
+        self.sector_encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+        self.sector_encoder.fit(df[["sector"]].fillna("Unknown"))
+
         # 2. Bucket edges for time_elapsed_ratio (fit on training data)
-        months_since = (df["report_month"] - df["approval_date"]).dt.days / 30.4375
-        planned_dur = (df["original_completion_date"] - df["approval_date"]).dt.days / 30.4375
+        months_since = pd.to_timedelta(df["report_month"] - df["approval_date"]).dt.days / 30.4375
+        planned_dur = pd.to_timedelta(df["original_completion_date"] - df["approval_date"]).dt.days / 30.4375
         time_ratio = months_since / (planned_dur + 1e-5)
 
         # Guard against all-NaN
         if time_ratio.notna().any():
-            _, self.bucket_edges = pd.qcut(
+            _, bucket_edges = pd.qcut(
                 time_ratio.dropna(),
                 q=BENCHMARK_QUANTILES,
                 labels=False,
                 retbins=True,
                 duplicates="drop",
             )
+            self.bucket_edges = np.asarray(bucket_edges, dtype=float)
         else:
             self.bucket_edges = np.linspace(0.0, 2.0, BENCHMARK_QUANTILES + 1)
 
-        # 3. Sector benchmarks
+        # 3. Sector benchmarks using dedicated sector encoder
         temp = df.copy()
         temp["time_bucket"] = pd.cut(
-            time_ratio, bins=self.bucket_edges, labels=False, include_lowest=True
+            time_ratio, bins=list(self.bucket_edges), labels=False, include_lowest=True
         )
-        # Use the encoder's first-column-transform as a stable sector id
-        cat_matrix = self.onehot.transform(temp[CATEGORICAL_COLS].fillna("Unknown"))
-        temp["_sector_id"] = np.argmax(cat_matrix, axis=1)
+        sec_matrix = np.asarray(self.sector_encoder.transform(temp[["sector"]].fillna("Unknown")))
+        has_sec = sec_matrix.sum(axis=1) > 0
+        temp["_sector_id"] = -1
+        if has_sec.any():
+            temp.loc[has_sec, "_sector_id"] = np.argmax(sec_matrix[has_sec], axis=1)
 
         self.sector_benchmarks = (
-            temp.groupby(["_sector_id", "time_bucket"])["physical_progress"]
+            temp[temp["_sector_id"] >= 0]
+            .groupby(["_sector_id", "time_bucket"], observed=False)["physical_progress"]
             .agg(["median", "std"])
             .reset_index()
             .rename(columns={"_sector_id": "sector_id",
                              "median": "sector_median",
                              "std": "sector_std"})
         )
-        self.sector_benchmarks["sector_std"] = (
-            self.sector_benchmarks["sector_std"].fillna(1.0).replace(0, 1.0)
-        )
+        if self.sector_benchmarks.empty:
+            self.sector_benchmarks = pd.DataFrame(columns=["sector_id", "time_bucket", "sector_median", "sector_std"])
+        else:
+            self.sector_benchmarks["sector_std"] = (
+                self.sector_benchmarks["sector_std"].fillna(1.0).replace(0, 1.0)
+            )
 
         # 4. Mark as fitted BEFORE calling transform so it can run
         self._is_fitted = True
@@ -173,25 +185,30 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self._is_fitted:
             raise RuntimeError("Must call fit() before transform().")
+        assert self.onehot is not None
+        assert self.sector_encoder is not None
+        assert self.bucket_edges is not None
+        assert self.sector_benchmarks is not None
+
         self._validate_input(X)
         df = self._prepare_types(X)
 
-        # Sort to make shift() operations meaningful
+        # Sort to make chronological lookups accurate
         df = df.sort_values(["project_id", "report_month"]).reset_index(drop=True)
 
         # --- 1. Categoricals -> one-hot ---
-        cat_matrix = self.onehot.transform(df[CATEGORICAL_COLS].fillna("Unknown"))
-        cat_cols = self.onehot.get_feature_names_out(CATEGORICAL_COLS)
+        cat_matrix = np.asarray(self.onehot.transform(df[CATEGORICAL_COLS].fillna("Unknown")))
+        cat_cols = list(self.onehot.get_feature_names_out(CATEGORICAL_COLS))
         cat_df = pd.DataFrame(cat_matrix, columns=cat_cols, index=df.index)
         df = pd.concat([df, cat_df], axis=1)
 
         # --- 2. Basic features ---
         df["original_cost_log"] = np.log1p(df["original_cost"])
         df["months_since_approval"] = (
-            (df["report_month"] - df["approval_date"]).dt.days / 30.4375
+            pd.to_timedelta(df["report_month"] - df["approval_date"]).dt.days / 30.4375
         )
         planned_dur = (
-            (df["original_completion_date"] - df["approval_date"]).dt.days / 30.4375
+            pd.to_timedelta(df["original_completion_date"] - df["approval_date"]).dt.days / 30.4375
         )
         df["time_elapsed_ratio"] = df["months_since_approval"] / (planned_dur + 1e-5)
         df["expenditure_to_original"] = (
@@ -201,21 +218,66 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
             (df["revised_cost"] - df["original_cost"]) / (df["original_cost"] + 1e-5)
         ) * 100.0
 
-        # --- 3. Trajectory (LAGGED — safe) ---
+        # --- 3. Trajectory (Calendar-aware Lagged — BUG-004 fix) ---
         w = VELOCITY_WINDOW_MONTHS
-        df["_p_lag"] = df.groupby("project_id")["physical_progress"].shift(w)
-        df["_e_lag"] = df.groupby("project_id")["cumulative_expenditure"].shift(w)
-        df["_p_lag2"] = df.groupby("project_id")["physical_progress"].shift(2 * w)
-        df["_e_lag2"] = df.groupby("project_id")["cumulative_expenditure"].shift(2 * w)
+        
+        # Calendar-aware lookup for T - 3 months and T - 6 months
+        df_lags = df[["project_id", "report_month", "physical_progress", "cumulative_expenditure"]].copy()
+        
+        # Target lag dates
+        df["_row_idx"] = np.arange(len(df))
+        df["_target_lag1"] = df["report_month"] - pd.DateOffset(months=w)
+        df["_target_lag2"] = df["report_month"] - pd.DateOffset(months=2 * w)
+        
+        # Merge as-of with backward direction and 45-day tolerance
+        lag1_match = pd.merge_asof(
+            df[["_row_idx", "project_id", "_target_lag1", "report_month"]].sort_values("_target_lag1"),
+            df_lags.rename(columns={
+                "report_month": "_lag1_month",
+                "physical_progress": "_p_lag",
+                "cumulative_expenditure": "_e_lag"
+            }).sort_values("_lag1_month"),
+            left_on="_target_lag1",
+            right_on="_lag1_month",
+            by="project_id",
+            tolerance=pd.Timedelta(days=45),
+            direction="nearest"
+        )
+        # Ensure lag month is strictly prior to report_month
+        valid_lag1 = lag1_match["_lag1_month"] < lag1_match["report_month"]
+        lag1_match.loc[~valid_lag1, ["_p_lag", "_e_lag", "_lag1_month"]] = np.nan
+        lag1_sorted = lag1_match.sort_values("_row_idx")
 
-        df["progress_velocity_3m"] = (df["physical_progress"] - df["_p_lag"]) / w
-        df["expenditure_velocity_3m"] = (df["cumulative_expenditure"] - df["_e_lag"]) / w
+        lag2_match = pd.merge_asof(
+            df[["_row_idx", "project_id", "_target_lag2", "report_month"]].sort_values("_target_lag2"),
+            df_lags.rename(columns={
+                "report_month": "_lag2_month",
+                "physical_progress": "_p_lag2",
+                "cumulative_expenditure": "_e_lag2"
+            }).sort_values("_lag2_month"),
+            left_on="_target_lag2",
+            right_on="_lag2_month",
+            by="project_id",
+            tolerance=pd.Timedelta(days=45),
+            direction="nearest"
+        )
+        valid_lag2 = lag2_match["_lag2_month"] < lag2_match["report_month"]
+        lag2_match.loc[~valid_lag2, ["_p_lag2", "_e_lag2", "_lag2_month"]] = np.nan
+        lag2_sorted = lag2_match.sort_values("_row_idx")
+
+        df["_p_lag"] = lag1_sorted["_p_lag"].values
+        df["_e_lag"] = lag1_sorted["_e_lag"].values
+        df["_p_lag2"] = lag2_sorted["_p_lag2"].values
+        df["_e_lag2"] = lag2_sorted["_e_lag2"].values
+
+        df["progress_velocity_3m"] = ((df["physical_progress"] - df["_p_lag"]) / w).fillna(0.0)
+        df["expenditure_velocity_3m"] = ((df["cumulative_expenditure"] - df["_e_lag"]) / w).fillna(0.0)
         df["progress_acceleration_3m"] = (
-            (df["physical_progress"] - df["_p_lag"]) - (df["_p_lag"] - df["_p_lag2"])
-        ) / (w * w)
+            ((df["physical_progress"] - df["_p_lag"]) - (df["_p_lag"] - df["_p_lag2"])) / (w * w)
+        ).fillna(0.0)
         df["expenditure_acceleration_3m"] = (
-            (df["cumulative_expenditure"] - df["_e_lag"]) - (df["_e_lag"] - df["_e_lag2"])
-        ) / (w * w)
+            ((df["cumulative_expenditure"] - df["_e_lag"]) - (df["_e_lag"] - df["_e_lag2"])) / (w * w)
+        ).fillna(0.0)
 
         # --- 4. Financial ---
         df["cost_burn_ratio"] = (
@@ -223,7 +285,7 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
         )
 
         # --- 5. Schedule ---
-        df["schedule_slippage_days"] = (
+        df["schedule_slippage_days"] = pd.to_timedelta(
             df["latest_revised_completion_date"] - df["original_completion_date"]
         ).dt.days.fillna(0)
         df["schedule_slippage_months"] = df["schedule_slippage_days"] / 30.4375
@@ -242,15 +304,18 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
         first_idx = df.groupby("project_id").head(1).index
         df.loc[first_idx, "schedule_revision_count"] = 0
 
-        # --- 6. Benchmark (using fitted edges + fitted benchmarks) ---
+        # --- 6. Benchmark (using fitted edges + fitted benchmarks + BUG-003 fix) ---
         df["_time_bucket"] = pd.cut(
             df["time_elapsed_ratio"],
-            bins=self.bucket_edges,
+            bins=list(self.bucket_edges),
             labels=False,
             include_lowest=True,
         )
-        cat_matrix = self.onehot.transform(df[CATEGORICAL_COLS].fillna("Unknown"))
-        df["_sector_id"] = np.argmax(cat_matrix, axis=1)
+        sec_matrix = np.asarray(self.sector_encoder.transform(df[["sector"]].fillna("Unknown")))
+        has_sec = sec_matrix.sum(axis=1) > 0
+        df["_sector_id"] = -1
+        if has_sec.any():
+            df.loc[has_sec, "_sector_id"] = np.argmax(sec_matrix[has_sec], axis=1)
 
         df = df.merge(
             self.sector_benchmarks,
@@ -273,9 +338,6 @@ class LeakageFreeFeatureEngine(BaseEstimator, TransformerMixin):
         X_out = X_out.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
         return X_out
-
-    def fit_transform(self, X: pd.DataFrame, y=None, **kwargs) -> pd.DataFrame:
-        return self.fit(X, y).transform(X)
 
     # -------------------------- HELPERS --------------------------
 
@@ -338,7 +400,7 @@ def _run_tests() -> None:
     df = _make_snapshots(20, 12)
     engine = LeakageFreeFeatureEngine()
 
-    X = engine.fit_transform(df)
+    X = engine.fit(df).transform(df)
 
     # 1. Shape check
     assert X.shape[0] == len(df), f"Row count mismatch: {X.shape[0]} vs {len(df)}"
@@ -362,13 +424,15 @@ def _run_tests() -> None:
     print("[OK] Unseen category handled gracefully (handle_unknown='ignore')")
 
     # 5. Bucket edges are the same after transform (no re-fit)
+    assert engine.bucket_edges is not None
     edges_before = engine.bucket_edges.copy()
     _ = engine.transform(new_df)
+    assert engine.bucket_edges is not None
     assert np.array_equal(edges_before, engine.bucket_edges), "Bucket edges changed"
     print("[OK] Bucket edges stable across transforms")
 
     # 6. Velocity requires history: first row of each project must be 0
-    v = X["progress_velocity_3m"]
+    v = cast(pd.Series, X["progress_velocity_3m"])
     assert v.abs().max() < 1e3, f"Velocity suspiciously large: {v.abs().max()}"
 
     # First observation per project should have zero velocity

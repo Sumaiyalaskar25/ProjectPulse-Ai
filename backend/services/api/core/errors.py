@@ -40,6 +40,33 @@ class ValidationError(AppException):
             details=details
         )
 
+class AuthenticationError(AppException):
+    def __init__(self, message: str = "Could not validate credentials", details: Optional[Any] = None):
+        super().__init__(
+            message=message,
+            code="AUTHENTICATION_FAILED",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            details=details
+        )
+
+class ForbiddenError(AppException):
+    def __init__(self, message: str = "Insufficient permissions to perform this action", details: Optional[Any] = None):
+        super().__init__(
+            message=message,
+            code="FORBIDDEN",
+            status_code=status.HTTP_403_FORBIDDEN,
+            details=details
+        )
+
+class ConflictError(AppException):
+    def __init__(self, message: str = "Resource conflict or concurrent state modification", details: Optional[Any] = None):
+        super().__init__(
+            message=message,
+            code="CONFLICT",
+            status_code=status.HTTP_409_CONFLICT,
+            details=details
+        )
+
 class ServiceUnavailableError(AppException):
     def __init__(self, message: str = "Upstream service temporarily unavailable", details: Optional[Any] = None):
         super().__init__(

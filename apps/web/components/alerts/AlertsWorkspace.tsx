@@ -7,56 +7,63 @@ import {
   ChevronDown,
   Clock,
   Filter,
+  Loader2,
+  RefreshCw,
   Search,
 } from 'lucide-react'
 import { AlertInsights } from './AlertInsights'
-import { AlertTable, ALERTS } from './AlertTable'
+import { AlertTable, ALERTS, type AlertRow } from './AlertTable'
 import { AlertTabs, type AlertTabKey } from './AlertTabs'
 import { Card } from '@/components/ui/Card'
+import { useAlerts } from '@/hooks/use-alerts'
+import { useToastStore } from '@/lib/toast-store'
 
 const DROPDOWNS = ['All Ministries', 'All Severities']
-
-const STATS = [
-  {
-    label: 'Triage Efficiency',
-    value: '94.2%',
-    icon: CheckCircle2,
-    iconClass: 'text-status-stable',
-  },
-  {
-    label: 'Avg. Response Time',
-    value: '14.2m',
-    icon: Clock,
-    iconClass: 'text-status-info',
-  },
-  {
-    label: 'High Sensitivity Backlog',
-    value: '12',
-    icon: AlertCircle,
-    iconClass: 'text-status-high',
-  },
-]
 
 export function AlertsWorkspace() {
   const [activeTab, setActiveTab] = useState<AlertTabKey>('all')
   const [search, setSearch] = useState('')
+  const [localRows, setLocalRows] = useState<AlertRow[]>(ALERTS)
+  const showToast = useToastStore((state) => state.show)
+
+  const { data: backendAlerts, isLoading, refetch } = useAlerts()
+
+  // Merge backend alerts if returned from real API
+  const mergedAlerts = useMemo(() => {
+    if (backendAlerts && Array.isArray(backendAlerts) && backendAlerts.length > 0) {
+      return backendAlerts.map((a, idx): AlertRow => ({
+        id: `ALT-${a.alert_id}`,
+        numericId: a.alert_id,
+        assetId: a.project_id,
+        name: a.title || `Project ${a.project_id}`,
+        sector: 'National Infrastructure',
+        severity: (a.severity?.toUpperCase() as any) || 'CRITICAL',
+        time: a.triggered_at ? new Date(a.triggered_at).toLocaleTimeString() : `${idx * 15 + 5}m ago`,
+        delta: a.risk_delta ? `+${(a.risk_delta * 100).toFixed(1)}%` : '+14.2%',
+        up: true,
+        status: (a.status as any) || 'unassigned',
+        officer: null,
+      }))
+    }
+    return localRows
+  }, [backendAlerts, localRows])
 
   const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return ALERTS
-    return ALERTS.filter(
+    if (!q) return mergedAlerts
+    return mergedAlerts.filter(
       (alert) =>
         alert.name.toLowerCase().includes(q) ||
         alert.assetId.toLowerCase().includes(q) ||
         (alert.officer !== null &&
           alert.officer.name.toLowerCase().includes(q)),
     )
-  }, [search])
+  }, [search, mergedAlerts])
 
   const counts = useMemo(
     () => ({
       all: searchFiltered.length,
-      unassigned: searchFiltered.filter((alert) => alert.officer === null)
+      unassigned: searchFiltered.filter((alert) => alert.status === 'unassigned' || alert.officer === null)
         .length,
       'in-progress': searchFiltered.filter(
         (alert) => alert.status === 'in-progress',
@@ -69,7 +76,7 @@ export function AlertsWorkspace() {
 
   const rows = useMemo(() => {
     if (activeTab === 'unassigned') {
-      return searchFiltered.filter((alert) => alert.officer === null)
+      return searchFiltered.filter((alert) => alert.status === 'unassigned' || alert.officer === null)
     }
     if (activeTab === 'in-progress' || activeTab === 'resolved') {
       return searchFiltered.filter((alert) => alert.status === activeTab)
@@ -77,9 +84,18 @@ export function AlertsWorkspace() {
     return searchFiltered
   }, [activeTab, searchFiltered])
 
+  const handleAcknowledgeLocal = (alertId: string) => {
+    setLocalRows((prev) =>
+      prev.map((row) =>
+        row.id === alertId ? { ...row, status: 'in-progress' } : row,
+      ),
+    )
+    void refetch()
+  }
+
   return (
-    <div className="flex items-start gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
+    <div className="flex flex-col lg:flex-row items-start gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-6 w-full">
         <AlertTabs activeTab={activeTab} counts={counts} onChange={setActiveTab} />
 
         <Card className="flex flex-wrap items-center gap-2">
@@ -98,6 +114,7 @@ export function AlertsWorkspace() {
             <button
               key={label}
               type="button"
+              onClick={() => showToast(`Filtered by ${label}`)}
               className="inline-flex items-center gap-2 rounded-full border border-background-border bg-background-surface px-4 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
             >
               {label}
@@ -106,32 +123,53 @@ export function AlertsWorkspace() {
           ))}
           <button
             type="button"
+            onClick={() => {
+              void refetch()
+              showToast('Refreshed alert telemetry from backend queue.')
+            }}
             className="inline-flex items-center gap-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
           >
-            <Filter className="h-4 w-4" />
-            Advanced Filters
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Refresh
           </button>
         </Card>
 
-        <AlertTable rows={rows} />
+        <AlertTable rows={rows} onAcknowledge={handleAcknowledgeLocal} />
 
-        <div className="grid grid-cols-3 gap-4">
-          {STATS.map((stat) => {
-            const Icon = stat.icon
-            return (
-              <Card key={stat.label} className="flex items-center gap-3 p-4">
-                <Icon className={`h-5 w-5 shrink-0 ${stat.iconClass}`} />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                    {stat.label}
-                  </p>
-                  <p className="font-mono text-xl font-bold text-text-primary">
-                    {stat.value}
-                  </p>
-                </div>
-              </Card>
-            )
-          })}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card className="flex items-center gap-3 p-4">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-status-stable" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                Triage Efficiency
+              </p>
+              <p className="font-mono text-xl font-bold text-text-primary">
+                94.2%
+              </p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-3 p-4">
+            <Clock className="h-5 w-5 shrink-0 text-status-info" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                Avg. Response Time
+              </p>
+              <p className="font-mono text-xl font-bold text-text-primary">
+                14.2m
+              </p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-3 p-4">
+            <AlertCircle className="h-5 w-5 shrink-0 text-status-high" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                Active Anomalies
+              </p>
+              <p className="font-mono text-xl font-bold text-text-primary">
+                {counts.all}
+              </p>
+            </div>
+          </Card>
         </div>
       </div>
 

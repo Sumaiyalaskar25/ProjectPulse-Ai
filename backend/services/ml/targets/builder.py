@@ -106,7 +106,7 @@ class TargetBuilder:
             })
         )
 
-        # Merge on (project_id, target_month) with tolerance
+        # Merge on (project_id, target_month) with tolerance enforcing forward future match
         merged = pd.merge_asof(
             df.sort_values("_target_month"),
             future_states.sort_values("_future_month"),
@@ -114,12 +114,17 @@ class TargetBuilder:
             right_on="_future_month",
             by="project_id",
             tolerance=self.tolerance,
-            direction="nearest",
+            direction="forward",
         )
 
-        # Identify censored rows (no future observation available)
-        merged["is_censored"] = merged["_future_revised_cost"].isna() | \
-                                merged["_future_completion"].isna()
+        # Identify censored rows:
+        # 1. Missing future snapshot data
+        # 2. Matched future month is not strictly in the future of the report month
+        merged["is_censored"] = (
+            merged["_future_revised_cost"].isna() |
+            merged["_future_completion"].isna() |
+            (merged["_future_month"] <= merged["report_month"])
+        )
 
         # Compute continuous targets
         merged["cost_overrun_pct"] = (

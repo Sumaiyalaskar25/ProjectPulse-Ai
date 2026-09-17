@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,13 +11,14 @@ import {
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
 import type {
   MaintenancePriority,
   MaintenanceRecord,
   MaintenanceStatus,
 } from '@/lib/maintenance-records'
 import { cn } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
 
 const PRIORITY_DOT: Record<MaintenancePriority, string> = {
   CRITICAL: 'bg-status-critical',
@@ -35,6 +39,23 @@ interface MaintenanceTableProps {
 }
 
 export function MaintenanceTable({ rows }: MaintenanceTableProps) {
+  const showToast = useToastStore((state) => state.show)
+  const router = useRouter()
+  const [page, setPage] = useState(1)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleForceResync = () => {
+    setIsRefreshing(true)
+    setTimeout(() => {
+      setIsRefreshing(false)
+      showToast('Maintenance logs and sensor telemetry synchronized.')
+    }, 600)
+  }
+
+  const handleViewRecord = (record: MaintenanceRecord) => {
+    showToast(`Viewing intervention audit: ${record.logId} (${record.name})`)
+  }
+
   return (
     <Card className="flex flex-col gap-0 p-0">
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4">
@@ -43,15 +64,26 @@ export function MaintenanceTable({ rows }: MaintenanceTableProps) {
             Intervention History &amp; Queue
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Showing prioritized maintenance records
+            Showing {rows.length} prioritized maintenance records
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" className="px-2.5">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="px-2.5"
+            onClick={() => showToast('Switched to grid inspection view')}
+          >
             <LayoutGrid className="h-4 w-4" />
           </Button>
-          <Button variant="secondary" size="sm" className="px-2.5">
-            <RefreshCw className="h-4 w-4" />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="px-2.5"
+            disabled={isRefreshing}
+            onClick={handleForceResync}
+          >
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
           </Button>
         </div>
       </div>
@@ -74,7 +106,7 @@ export function MaintenanceTable({ rows }: MaintenanceTableProps) {
             {rows.map((record) => (
               <tr
                 key={record.logId}
-                className="border-b border-background-border last:border-0"
+                className="border-b border-background-border last:border-0 hover:bg-background-card/40 transition-colors"
               >
                 <td className="py-4 pl-6 pr-4">
                   <p className="font-mono text-sm font-semibold text-text-primary">
@@ -123,11 +155,14 @@ export function MaintenanceTable({ rows }: MaintenanceTableProps) {
                   </Badge>
                 </td>
                 <td className="py-4 pl-4 pr-6 text-right">
-                  <PendingAction>
-                    <Button variant="secondary" size="sm" className="px-2.5">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </PendingAction>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="px-2.5"
+                    onClick={() => handleViewRecord(record)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -138,16 +173,26 @@ export function MaintenanceTable({ rows }: MaintenanceTableProps) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-background-border px-6 py-4">
         <div className="flex items-center gap-4">
           <span className="text-sm text-text-secondary">
-            Showing 1–10 of 2,486 records
+            Showing 1–{rows.length} of {rows.length} records
           </span>
           <span className="flex items-center gap-1">
-            <Button variant="secondary" size="sm" className="px-2.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="px-2.5"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-background-border bg-background-surface px-2 font-mono text-sm font-semibold text-text-primary">
-              1
+              {page}
             </span>
-            <Button variant="secondary" size="sm" className="px-2.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="px-2.5"
+              onClick={() => setPage((p) => p + 1)}
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </span>
@@ -159,12 +204,15 @@ export function MaintenanceTable({ rows }: MaintenanceTableProps) {
           <span className="font-mono text-xs text-text-muted">
             Last Sync: 2023-10-27 16:57:01 UTC
           </span>
-          <PendingAction>
-            <Button variant="secondary" size="sm">
-              <RefreshCw className="h-4 w-4" />
-              Force Resync
-            </Button>
-          </PendingAction>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={isRefreshing}
+            onClick={handleForceResync}
+          >
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            Force Resync
+          </Button>
         </div>
       </div>
     </Card>

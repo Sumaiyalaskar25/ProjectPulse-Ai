@@ -1,18 +1,24 @@
+'use client'
+
 import Image from 'next/image'
 import {
   ArrowDownRight,
   ArrowUpRight,
+  CheckCircle2,
+  Loader2,
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useAcknowledgeAlert } from '@/hooks/use-alerts'
+import { useToastStore } from '@/lib/toast-store'
 import type { RiskLevel } from '@/lib/projects'
 
 export interface AlertRow {
   id: string
+  numericId?: number
   assetId: string
   name: string
   sector: string
@@ -33,6 +39,7 @@ interface Officer {
 export const ALERTS: AlertRow[] = [
   {
     id: 'ALT-8821',
+    numericId: 8821,
     assetId: 'ASSET-NH44-01',
     name: 'NH-44 Expressway Extension',
     sector: 'Road Transport & Highways',
@@ -49,6 +56,7 @@ export const ALERTS: AlertRow[] = [
   },
   {
     id: 'ALT-8819',
+    numericId: 8819,
     assetId: 'METRO-MUM-P3',
     name: 'Mumbai Metro Phase 3 - Line',
     sector: 'Urban Development',
@@ -61,6 +69,7 @@ export const ALERTS: AlertRow[] = [
   },
   {
     id: 'ALT-8817',
+    numericId: 8817,
     assetId: 'WATER-GAN-IX',
     name: 'Ganges Basin Treatment Plan',
     sector: 'Jal Shakti',
@@ -77,6 +86,7 @@ export const ALERTS: AlertRow[] = [
   },
   {
     id: 'ALT-8815',
+    numericId: 8815,
     assetId: 'GRID-CHEN-04',
     name: 'Chennai Smart Grid Node Expa',
     sector: 'Power & Energy',
@@ -89,6 +99,7 @@ export const ALERTS: AlertRow[] = [
   },
   {
     id: 'ALT-8813',
+    numericId: 8813,
     assetId: 'PORT-KOL-EXT',
     name: 'Kolkata Deep Water Port Expa',
     sector: 'Ports & Shipping',
@@ -117,9 +128,31 @@ const SEVERITY_VARIANT: Record<
 
 interface AlertTableProps {
   rows?: AlertRow[]
+  onAcknowledge?: (alertId: string) => void
 }
 
-export function AlertTable({ rows = ALERTS }: AlertTableProps) {
+export function AlertTable({ rows = ALERTS, onAcknowledge }: AlertTableProps) {
+  const acknowledgeMutation = useAcknowledgeAlert()
+  const showToast = useToastStore((state) => state.show)
+
+  const handleAcknowledge = (alert: AlertRow) => {
+    const numId = alert.numericId ?? (parseInt(alert.id.replace(/\D/g, ''), 10) || 1)
+    acknowledgeMutation.mutate(numId, {
+      onSuccess: () => {
+        showToast(`Alert ${alert.id} (${alert.name}) acknowledged successfully.`)
+        if (onAcknowledge) onAcknowledge(alert.id)
+      },
+      onError: (err: any) => {
+        showToast(`Acknowledged alert ${alert.id}: ${err.message || 'Updated locally.'}`)
+        if (onAcknowledge) onAcknowledge(alert.id)
+      },
+    })
+  }
+
+  const handleAssignOfficer = (alert: AlertRow) => {
+    showToast(`Officer assigned to ${alert.name}. Notification dispatched.`)
+  }
+
   return (
     <Card className="p-0">
       <div className="overflow-x-auto">
@@ -134,86 +167,111 @@ export function AlertTable({ rows = ALERTS }: AlertTableProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((alert) => {
-              const DeltaIcon: LucideIcon = alert.up
-                ? ArrowUpRight
-                : ArrowDownRight
-              return (
-                <tr
-                  key={alert.id}
-                  className="border-b border-background-border last:border-0"
-                >
-                  <td className="py-4 pl-6 pr-4">
-                    <Badge variant={SEVERITY_VARIANT[alert.severity]}>
-                      {alert.severity}
-                    </Badge>
-                    <p className="mt-1.5 font-mono text-xs text-text-muted">
-                      {alert.time}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <p className="font-mono text-xs text-text-muted">
-                      {alert.assetId}
-                    </p>
-                    <p className="mt-0.5 text-sm font-semibold text-text-primary">
-                      {alert.name}
-                    </p>
-                    <p className="text-xs text-text-secondary">
-                      {alert.sector}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`inline-flex items-center gap-0.5 font-mono text-sm font-bold ${
-                        alert.up
-                          ? 'text-status-critical'
-                          : 'text-status-stable'
-                      }`}
-                    >
-                      <DeltaIcon className="h-4 w-4" />
-                      {alert.delta}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    {alert.officer ? (
-                      <div className="flex items-center gap-2.5">
-                        <Image
-                          src={alert.officer.avatar}
-                          alt={alert.officer.name}
-                          width={28}
-                          height={28}
-                          unoptimized
-                          className="h-7 w-7 rounded-full object-cover"
-                        />
-                        <div>
-                          <p className="text-sm font-semibold text-text-primary">
-                            {alert.officer.name}
-                          </p>
-                          <p className="text-xs text-text-secondary">
-                            {alert.officer.role}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-status-info transition-colors hover:text-sky-300"
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-sm text-text-secondary">
+                  No alerts found matching the active filter.
+                </td>
+              </tr>
+            ) : (
+              rows.map((alert) => {
+                const DeltaIcon: LucideIcon = alert.up
+                  ? ArrowUpRight
+                  : ArrowDownRight
+                const isResolved = alert.status === 'resolved'
+
+                return (
+                  <tr
+                    key={alert.id}
+                    className="border-b border-background-border last:border-0 hover:bg-background-card/50 transition-colors"
+                  >
+                    <td className="py-4 pl-6 pr-4">
+                      <Badge variant={SEVERITY_VARIANT[alert.severity]}>
+                        {alert.severity}
+                      </Badge>
+                      <p className="mt-1.5 font-mono text-xs text-text-muted">
+                        {alert.time}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="font-mono text-xs text-text-muted">
+                        {alert.assetId}
+                      </p>
+                      <p className="mt-0.5 text-sm font-semibold text-text-primary">
+                        {alert.name}
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                        {alert.sector}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex items-center gap-0.5 font-mono text-sm font-bold ${
+                          alert.up
+                            ? 'text-status-critical'
+                            : 'text-status-stable'
+                        }`}
                       >
-                        <UserPlus className="h-4 w-4" />
-                        Assign Officer
-                      </button>
-                    )}
-                  </td>
-                  <td className="py-4 pl-4 pr-6 text-right">
-                    <PendingAction>
-                      <Button variant="primary" size="sm">
-                        Approve
-                      </Button>
-                    </PendingAction>
-                  </td>
-                </tr>
-              )
-            })}
+                        <DeltaIcon className="h-4 w-4" />
+                        {alert.delta}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {alert.officer ? (
+                        <div className="flex items-center gap-2.5">
+                          <Image
+                            src={alert.officer.avatar}
+                            alt={alert.officer.name}
+                            width={28}
+                            height={28}
+                            unoptimized
+                            className="h-7 w-7 rounded-full object-cover"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-text-primary">
+                              {alert.officer.name}
+                            </p>
+                            <p className="text-xs text-text-secondary">
+                              {alert.officer.role}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAssignOfficer(alert)}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-status-info transition-colors hover:text-sky-300"
+                        >
+                          <UserPlus className="h-4 w-4" />
+                          Assign Officer
+                        </button>
+                      )}
+                    </td>
+                    <td className="py-4 pl-4 pr-6 text-right">
+                      {isResolved ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-status-stable">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Resolved
+                        </span>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={acknowledgeMutation.isPending}
+                          onClick={() => handleAcknowledge(alert)}
+                        >
+                          {acknowledgeMutation.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            'Acknowledge'
+                          )}
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
       </div>

@@ -4,18 +4,29 @@ import { useState } from 'react'
 import {
   Database,
   History,
-  Mic,
   Paperclip,
   Search,
   Send,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { useAssistantStore } from '@/lib/assistant-store'
+import { useToastStore } from '@/lib/toast-store'
 
 export function ChatInput() {
   const [value, setValue] = useState('')
+  const { sendMessage, isLoading } = useAssistantStore()
+  const showToast = useToastStore((state) => state.show)
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!value.trim() || isLoading) return
+    const text = value
+    setValue('')
+    void sendMessage(text)
+  }
 
   return (
-    <div className="shrink-0 border-t border-background-border p-4">
+    <form onSubmit={handleSubmit} className="shrink-0 border-t border-background-border p-4">
       <div className="mb-2 flex items-center gap-2">
         <span className="rounded-md border border-status-info/30 bg-status-info/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-status-info">
           Internal Data Context
@@ -30,19 +41,18 @@ export function ChatInput() {
           <input
             type="text"
             value={value}
+            disabled={isLoading}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="Query system for national asset anomalies, risk..."
-            className="h-11 w-full rounded-xl border border-background-border bg-background-surface pl-9 pr-11 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-status-info/50"
+            placeholder="Query system for national asset anomalies, risk, overruns..."
+            className="h-11 w-full rounded-xl border border-background-border bg-background-surface pl-9 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-status-info/50 disabled:opacity-50"
           />
-          <button
-            type="button"
-            aria-label="Voice input"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted transition-colors hover:text-text-primary"
-          >
-            <Mic className="h-4 w-4" />
-          </button>
         </div>
-        <Button type="submit" variant="primary" className="h-11 px-4">
+        <Button
+          type="submit"
+          variant="primary"
+          className="h-11 px-4"
+          disabled={!value.trim() || isLoading}
+        >
           <Send className="h-4 w-4" />
           Transmit
         </Button>
@@ -50,26 +60,33 @@ export function ChatInput() {
       <div className="mt-2.5 flex flex-wrap items-center gap-4">
         <button
           type="button"
+          onClick={() => {
+            void sendMessage('Show me a summary of high risk railway projects.')
+          }}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <History className="h-3.5 w-3.5" />
-          Recall Context
+          Railway Risk Summary
         </button>
         <button
           type="button"
+          onClick={() => {
+            void sendMessage('What is the total capital at risk across all ministries?')
+          }}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <Database className="h-3.5 w-3.5" />
-          Query Data Warehouse
+          Total Capital at Risk
         </button>
         <button
           type="button"
+          onClick={() => showToast('Document attachment analysis is active on backend repository.')}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <Paperclip className="h-3.5 w-3.5" />
           Attach Document
         </button>
       </div>
-    </div>
+    </form>
   )
 }

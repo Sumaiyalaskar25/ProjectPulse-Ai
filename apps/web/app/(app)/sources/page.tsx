@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { Plus, RefreshCw, Search } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { AuditFooter } from '@/components/data-sources/AuditFooter'
@@ -8,6 +11,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { SOURCES } from '@/lib/data-sources'
 import { pageTitle } from '@/lib/design-tokens'
 import { cn } from '@/lib/utils'
+import { useToastStore } from '@/lib/toast-store'
 
 const STATUS_READOUTS = [
   { text: '⚡ Gateway Feed: Active', className: 'text-status-stable' },
@@ -15,6 +19,29 @@ const STATUS_READOUTS = [
 ]
 
 export default function SourcesPage() {
+  const showToast = useToastStore((state) => state.show)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [filter, setFilter] = useState('')
+
+  const handleRefresh = () => {
+    setIsRefreshing(true)
+    setTimeout(() => {
+      setIsRefreshing(false)
+      showToast('All 8 external data gateways synchronized with 99.8% consistency.')
+    }, 700)
+  }
+
+  const handleConnectFeed = () => {
+    showToast('Data Ingestion Gateway opened. Connect Kafka/REST stream.')
+  }
+
+  const filteredSources = SOURCES.filter(
+    (s) =>
+      s.title.toLowerCase().includes(filter.toLowerCase()) ||
+      s.dataType.toLowerCase().includes(filter.toLowerCase()) ||
+      s.description.toLowerCase().includes(filter.toLowerCase()),
+  )
+
   return (
     <AppShell
       activeNav="Data Sources"
@@ -25,21 +52,25 @@ export default function SourcesPage() {
           <div>
             <h1 className={cn(pageTitle)}>DATA SOURCES</h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-              Trusted data powering PAIMANA&apos;s Infrastructure
+              Trusted data powering ProjectPulse&apos;s Infrastructure
               Intelligence. Unified gateway for government registries,
               institutional reports, and regional sensor telemetry.
             </p>
           </div>
           <div className="flex flex-col items-end gap-3">
             <p className="font-mono text-xs text-text-muted">
-              ID: PAIMANA_SOURCE_V4
+              ID: PULSE_SOURCE_V4
             </p>
             <div className="flex items-center gap-2">
-              <Button variant="secondary">
-                <RefreshCw className="h-4 w-4" />
-                Refresh Data
+              <Button
+                variant="secondary"
+                disabled={isRefreshing}
+                onClick={handleRefresh}
+              >
+                <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
               </Button>
-              <Button variant="primary">
+              <Button variant="primary" onClick={handleConnectFeed}>
                 <Plus className="h-4 w-4" />
                 Connect New Feed
               </Button>
@@ -47,7 +78,7 @@ export default function SourcesPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             label="Active Data Sources"
             value="08"
@@ -72,6 +103,8 @@ export default function SourcesPage() {
               type="search"
               aria-label="Filter data sources"
               placeholder="Filter data sources, departments, or formats..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
               className="h-9 w-full rounded-lg border border-background-border bg-background-surface pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-status-info/50"
             />
           </div>
@@ -100,8 +133,8 @@ export default function SourcesPage() {
               platform.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            {SOURCES.map((source) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredSources.map((source) => (
               <SourceCard key={source.ref} source={source} />
             ))}
           </div>

@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
     "postgresql+asyncpg://postgres:postgres@localhost:5432/projectpulse"
@@ -14,6 +15,13 @@ DATABASE_URL = os.getenv(
 # Replace standard postgresql scheme with asyncpg if needed
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Fail-fast in production if default credentials are detected
+if ENVIRONMENT == "production":
+    if "postgres:postgres@localhost" in DATABASE_URL or not os.getenv("DATABASE_URL"):
+        raise RuntimeError(
+            "CRITICAL SECURITY CONFIGURATION ERROR: Production environment detected with default or missing DATABASE_URL."
+        )
 
 engine = create_async_engine(
     DATABASE_URL,

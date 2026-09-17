@@ -1,10 +1,18 @@
-import { ArrowRight, Lightbulb } from 'lucide-react'
+'use client'
+
+import { ArrowRight, Download, Lightbulb } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
 
 export function AiRecommendation() {
+  const showToast = useToastStore((state) => state.show)
+
+  const handleExportBrief = () => {
+    showToast('Executive scenario brief generated and downloaded.')
+  }
+
   return (
-    <Card className="flex items-start justify-between gap-6">
+    <Card className="flex flex-col md:flex-row items-start justify-between gap-6">
       <div className="flex min-w-0 flex-1 items-start gap-4">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-background-border bg-background-surface">
           <Lightbulb className="h-5 w-5 text-status-info" />
@@ -29,29 +37,29 @@ export function AiRecommendation() {
           <div className="mt-4 flex flex-wrap gap-5">
             <button
               type="button"
+              onClick={() => showToast('Displaying Policy Decision Framework details.')}
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-status-info transition-colors hover:text-sky-300"
             >
               View Detailed Policy Log
               <ArrowRight className="h-4 w-4" />
             </button>
-            <PendingAction>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-status-info transition-colors hover:text-sky-300"
-              >
-                Export as Executive Brief
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </PendingAction>
+            <button
+              type="button"
+              onClick={handleExportBrief}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-status-info transition-colors hover:text-sky-300"
+            >
+              <Download className="h-4 w-4" />
+              Export as Executive Brief
+            </button>
           </div>
         </div>
       </div>
-      <div className="shrink-0 text-right">
+      <div className="shrink-0 text-left md:text-right">
         <p className="text-xs font-bold uppercase tracking-wider text-text-muted">
           Estimated Net Savings
         </p>
-        <p className="mt-1 font-mono text-4xl font-bold text-status-stable">
-          $2.42B USD
+        <p className="mt-1 font-mono text-3xl md:text-4xl font-bold text-status-stable">
+          ₹2,420 Cr
         </p>
       </div>
     </Card>

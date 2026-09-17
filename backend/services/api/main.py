@@ -77,7 +77,7 @@ app.include_router(risk.router)
 # 7. System Endpoints
 @app.get("/health", tags=["system"])
 async def health_check():
-    """System health check with active database probe."""
+    """System liveness health check."""
     db_ok = await check_db_health()
     return {
         "status": "healthy" if db_ok else "degraded",
@@ -85,6 +85,27 @@ async def health_check():
         "database_connected": db_ok,
         "request_id": get_current_request_id() or None
     }
+
+@app.get("/health/ready", tags=["system"])
+async def readiness_check():
+    """Comprehensive readiness probe checking DB connectivity and ML model availability."""
+    from ..ml.inference.predict import check_model_readiness
+    db_ok = await check_db_health()
+    ml_readiness = check_model_readiness()
+    ml_ok = ml_readiness.get("ready", False)
+    
+    is_ready = db_ok and ml_ok
+    status_code = 200 if is_ready else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if is_ready else "not_ready",
+            "database_ready": db_ok,
+            "ml_model_ready": ml_ok,
+            "ml_details": ml_readiness,
+            "request_id": get_current_request_id() or None
+        }
+    )
 
 @app.get("/", tags=["system"])
 async def root():

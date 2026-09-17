@@ -1,8 +1,10 @@
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { PendingAction } from '@/components/ui/PendingAction'
+import { useToastStore } from '@/lib/toast-store'
 import type { Project } from '@/lib/projects'
 
 const BANNER_IMAGE =
@@ -31,6 +33,12 @@ export function ProjectHeader({
   baselineEnd,
   progress,
 }: ProjectHeaderProps) {
+  const showToast = useToastStore((state) => state.show)
+
+  const handleExportDossier = () => {
+    showToast(`Exported strategic project dossier for ${project.name}.`)
+  }
+
   return (
     <div className="relative h-64 overflow-hidden rounded-xl">
       <Image
@@ -46,11 +54,9 @@ export function ProjectHeader({
       <div className="absolute inset-0 flex flex-col justify-between p-6">
         <div className="flex justify-end">
           <div className="flex items-center gap-2">
-            <PendingAction>
-              <Button variant="secondary" size="sm">
-                Export Dossier
-              </Button>
-            </PendingAction>
+            <Button variant="secondary" size="sm" onClick={handleExportDossier}>
+              Export Dossier
+            </Button>
             <Button asChild variant="primary" size="sm">
               <Link href={`/projects/${project.id}/simulate`}>
                 ▶ Run Intervention Simulation

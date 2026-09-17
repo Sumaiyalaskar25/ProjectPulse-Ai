@@ -254,9 +254,18 @@ def predict_risk(
     # ---- Component risks (0-100) ----
     cost_risk = prob_cost_20pct * 100.0
     schedule_risk = prob_delay_6mo * 100.0
-    # Trajectory risk: based on history length. Shorter history -> lower confidence, higher risk
+    
+    # Trajectory risk (BUG-006 fix): derive from actual progress velocity and acceleration
     history_len = len(df)
-    trajectory_risk = float(np.clip(50.0 * (1.0 - min(history_len, 12) / 12.0), 0.0, 100.0))
+    if "progress_velocity_3m" in X_latest.columns and "progress_acceleration_3m" in X_latest.columns:
+        v = float(X_latest["progress_velocity_3m"].iloc[0])
+        a = float(X_latest["progress_acceleration_3m"].iloc[0])
+        # Progress velocity: <0%/mo -> 100 risk, >3%/mo -> low risk
+        vel_risk = float(np.clip(100.0 - (v * 25.0), 0.0, 100.0))
+        acc_risk = float(np.clip(50.0 - (a * 40.0), 0.0, 100.0))
+        trajectory_risk = float(np.clip(0.7 * vel_risk + 0.3 * acc_risk, 0.0, 100.0))
+    else:
+        trajectory_risk = 50.0
 
     # ---- Composite ----
     composite = (
@@ -283,17 +292,16 @@ def predict_risk(
     risk_delta = None
     risk_acceleration = None
     if history and len(history) >= 2:
-        # Quick approximation: recompute on history[:-1] to get prior score
-        # (in production, we'd store prior scores in DB and look them up)
+        # Recompute with consistent formula (BUG-007 fix)
         try:
-            prior = _compute_quick_composite(models, history[:-1] + [history[-1]])
+            prior = _compute_consistent_prior(models, history[:-1])
             if prior is not None:
                 risk_previous = prior
                 risk_delta = composite - prior
         except Exception:
             pass
 
-    # ---- Top drivers ----
+    # ---- Top drivers (BUG-008 fix) ----
     try:
         drivers = _top_drivers(models, X_latest, top_n=3)
     except Exception:
@@ -343,8 +351,8 @@ def predict_risk(
     }
 
 
-def _compute_quick_composite(models: Dict[str, Any], history: List[Dict[str, Any]]) -> Optional[float]:
-    """Fast approximation: run classifiers on the given history's last row."""
+def _compute_consistent_prior(models: Dict[str, Any], history: List[Dict[str, Any]]) -> Optional[float]:
+    """Compute prior score using identical scoring weights and model inferences (BUG-007 fix)."""
     try:
         df = pd.DataFrame(history)
         for col in ["report_month", "approval_date",
@@ -356,8 +364,21 @@ def _compute_quick_composite(models: Dict[str, Any], history: List[Dict[str, Any
         X_last = X.iloc[[-1]]
         prob_s = float(models["schedule_classifier"].predict_proba(X_last)[0][1])
         prob_c = float(models["cost_classifier"].predict_proba(X_last)[0][1])
-        composite = (0.5 * prob_s + 0.5 * prob_c) * 100.0
-        return composite
+        cost_risk = prob_c * 100.0
+        schedule_risk = prob_s * 100.0
+        
+        v = float(X_last["progress_velocity_3m"].iloc[0]) if "progress_velocity_3m" in X_last.columns else 0.0
+        a = float(X_last["progress_acceleration_3m"].iloc[0]) if "progress_acceleration_3m" in X_last.columns else 0.0
+        vel_risk = float(np.clip(100.0 - (v * 25.0), 0.0, 100.0))
+        acc_risk = float(np.clip(50.0 - (a * 40.0), 0.0, 100.0))
+        traj_risk = float(np.clip(0.7 * vel_risk + 0.3 * acc_risk, 0.0, 100.0))
+        
+        composite = (
+            WEIGHT_COST_RISK * cost_risk +
+            WEIGHT_SCHEDULE_RISK * schedule_risk +
+            WEIGHT_TRAJECTORY_RISK * traj_risk
+        )
+        return float(np.clip(composite, 0.0, 100.0))
     except Exception:
         return None
 

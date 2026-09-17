@@ -66,43 +66,38 @@ class SQLAlchemyAlertRepository(AlertRepository):
     async def insert_alerts(self, alerts: List[dict[str, Any]]) -> List[int]:
         inserted = []
         for alert in alerts:
-            # Check for duplicate within 7 days
-            check_stmt = text("""
-                SELECT alert_id FROM alerts 
-                WHERE project_id = :project_id 
-                AND alert_type = :alert_type 
-                AND triggered_at > NOW() - INTERVAL '7 days'
-                LIMIT 1
-            """)
-            existing = await self.db.execute(check_stmt, {
-                'project_id': alert['project_id'],
-                'alert_type': alert['alert_type']
-            })
-            if existing.first():
-                continue
-                
+            # Atomic conditional insertion to prevent duplicate race conditions (within 7 days)
             stmt = text("""
                 INSERT INTO alerts 
                 (project_id, risk_id, alert_type, severity, title, description, 
-                 risk_previous, risk_current, risk_delta, trigger_condition, triggered_at)
-                VALUES 
-                (:project_id, :risk_id, :alert_type, :severity, :title, :description,
-                 :risk_previous, :risk_current, :risk_delta, :trigger_condition, NOW())
+                 risk_previous, risk_current, risk_delta, trigger_condition, triggered_at, status)
+                SELECT 
+                 :project_id, :risk_id, :alert_type, :severity, :title, :description,
+                 :risk_previous, :risk_current, :risk_delta, :trigger_condition, NOW(), 'open'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM alerts
+                    WHERE project_id = :project_id
+                      AND alert_type = :alert_type
+                      AND triggered_at > NOW() - INTERVAL '7 days'
+                )
                 RETURNING alert_id
             """)
             result = await self.db.execute(stmt, alert)
-            inserted.append(result.scalar())
+            scalar_id = result.scalar()
+            if scalar_id is not None:
+                inserted.append(scalar_id)
             
         await self.db.commit()
         return inserted
 
     async def acknowledge_alert(self, alert_id: int, assigned_to: Optional[str] = None) -> Optional[dict[str, Any]]:
+        # Guard state transition: only open alerts can transition to acknowledged
         stmt = text("""
             UPDATE alerts
             SET status = 'acknowledged',
                 acknowledged_at = NOW(),
                 assigned_to = COALESCE(:assigned_to, assigned_to)
-            WHERE alert_id = :alert_id
+            WHERE alert_id = :alert_id AND status = 'open'
             RETURNING alert_id, project_id, alert_type, severity, title, description,
                       risk_previous, risk_current, risk_delta, status, triggered_at, acknowledged_at
         """)
